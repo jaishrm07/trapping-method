@@ -20,7 +20,7 @@ source ~/miniconda3/etc/profile.d/conda.sh
 conda activate trap
 
 # HuggingFace cache → scratch (home is small)
-export HF_HOME=/scratch/jaishrm/.cache/huggingface
+export HF_HOME=/scratch/jaisharma/.cache/huggingface
 mkdir -p "$HF_HOME"
 
 cd ~/trapping-immunization

@@ -19,7 +19,7 @@ export PATH=~/miniconda3/bin:$PATH
 source ~/miniconda3/etc/profile.d/conda.sh
 conda activate trap
 
-export HF_HOME=/scratch/jaishrm/.cache/huggingface
+export HF_HOME=/scratch/jaisharma/.cache/huggingface
 mkdir -p "$HF_HOME"
 
 cd ~/trapping-immunization

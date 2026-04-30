@@ -31,24 +31,43 @@ from __future__ import annotations
 import torch
 
 
+def _trace_normalize(S: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
+    """Divide a square PSD-ish matrix by its trace.
+
+    The Stage-2 smoke test on real ResNet18 features showed ||H||_F ≈ 10⁴,
+    making R_well ≈ 22 600 — three orders of magnitude above the cross-entropy
+    term, which would force λ_well near 1e-5 to avoid the regularizer
+    steamrolling primary-task accuracy.
+
+    Both R_well and R_ill are homogeneous in S: r_well(αS) = α² · r_well(S)
+    and r_ill(αS) = α⁻² · r_ill(S). Dividing by tr(S) (= Σ σ_i for PSD)
+    gives a scale-invariant input where both regularizers live in O(1) and
+    the default λ_well = λ_ill = 1.0 in the config behaves sanely.
+
+    Note this rescales the gradient flowing into θ by 1/tr(S), so the
+    regularizer effectively self-tunes its learning rate to feature magnitude.
+    """
+    trace = torch.diagonal(S).sum()
+    return S / (trace + eps)
+
+
 def r_well(S: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
-    """κ-minimizing regularizer (Eq. 3 of Zheng et al.).
+    """κ-minimizing regularizer (Eq. 3 of Zheng et al.), trace-normalized.
 
-        R_well(S) = ½ ||S||₂² − (1/(2p)) ||S||_F²
+        R_well(S̃) = ½ ||S̃||₂² − (1/(2p)) ||S̃||_F²,   where S̃ = S / tr(S)
 
-    where ||S||₂ is the spectral norm (largest singular value) and p =
-    min(p_r, p_c) is the smaller dimension. Nonnegative; zero iff κ(S) = 1.
+    Nonnegative; zero iff κ(S) = 1.
 
     Args:
-        S: a 2-D matrix tensor, typically a Hessian approximation [D_hid, D_hid].
-        eps: numerical guard (not used in the formula but accepted for symmetry
-            with r_ill).
+        S: a 2-D PSD-ish matrix, typically a Hessian approximation [D_hid, D_hid].
+        eps: trace-normalization stability term.
 
     Returns:
         A scalar tensor (differentiable). Smaller → better-conditioned S.
     """
     if S.dim() != 2:
         raise ValueError(f"r_well expects a 2-D matrix, got shape {tuple(S.shape)}")
+    S = _trace_normalize(S, eps=eps)
     sigmas = torch.linalg.svdvals(S)
     spectral_sq = sigmas[0].pow(2)         # ||S||₂²
     frob_sq = (S ** 2).sum()               # ||S||_F² = Σ σ_i²
@@ -57,17 +76,17 @@ def r_well(S: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
 
 
 def r_ill(S: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
-    """κ-maximizing regularizer (Eq. 12 of Zheng et al.).
+    """κ-maximizing regularizer (Eq. 12 of Zheng et al.), trace-normalized.
 
-        R_ill(S) = 1 / [(1/(2k)) ||S||_F² − ½ (σ_S^min)²]
+        R_ill(S̃) = 1 / [(1/(2k)) ||S̃||_F² − ½ (σ_S̃^min)²],   where S̃ = S / tr(S)
 
-    Reading: minimizing R_ill (so the *value* shrinks) requires the denominator
-    to *grow* — pushing σ_min toward 0 and ||S||_F² up, increasing κ.
+    Reading: minimizing R_ill (the value shrinks) requires the denominator
+    to grow — pushing σ_min toward 0 and ||S||_F² up, increasing κ.
 
     Args:
-        S: a 2-D matrix tensor, typically a Hessian approximation [D_hid, D_hid].
-        eps: small additive constant inside the reciprocal to avoid blow-up
-            when the denominator approaches 0 (early in training).
+        S: a 2-D PSD-ish matrix, typically a Hessian approximation [D_hid, D_hid].
+        eps: small constant inside the reciprocal *and* the trace
+            normalization, so empty/zero inputs don't NaN.
 
     Returns:
         A scalar tensor (differentiable). Smaller → ill-conditioned S → harder
@@ -75,10 +94,11 @@ def r_ill(S: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
     """
     if S.dim() != 2:
         raise ValueError(f"r_ill expects a 2-D matrix, got shape {tuple(S.shape)}")
+    S = _trace_normalize(S, eps=eps)
     sigmas = torch.linalg.svdvals(S)
     sigma_min_sq = sigmas[-1].pow(2)
     frob_sq = (S ** 2).sum()
-    k = float(sigmas.numel())  # rank upper-bounded by # of singular values
+    k = float(sigmas.numel())
     denom = frob_sq / (2.0 * k) - 0.5 * sigma_min_sq
     return 1.0 / (denom + eps)
 
