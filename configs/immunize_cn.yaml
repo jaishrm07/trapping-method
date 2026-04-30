@@ -12,7 +12,7 @@ image_size: 224
 
 primary:
   dataset: imagenet_val
-  root: /scratch/jaishrm/imagenet         # adjust to wherever val/ tarball is on ARC
+  root: ./data                             # unused for HF-based ImageNet (see src/data.py)
   max_train: 50000                         # use all 50K val images
 
 harmful:
@@ -28,9 +28,10 @@ batch_size: 64
 num_workers: 4
 grad_clip: 5.0
 
-# Loss weights
+# Loss weights — both O(1) thanks to trace-normalization in src/losses.py.
+# Symmetric default; tune if RIR comes in low or primary acc collapses.
 lambda_well: 1.0
-lambda_ill: 0.1
+lambda_ill: 1.0
 
 # Iteration budget — Zheng/trapping use ~2-3 epochs of immunization.
 # 50K / 64 ≈ 780 iters per epoch on the primary set; 3 epochs ≈ 2400.
