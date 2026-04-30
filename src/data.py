@@ -127,32 +127,59 @@ def load_dataset_by_name(name: str, root: str = "./data", image_size: int = 224,
     if name == "country211":
         return load_country211(image_size=image_size, cache_dir=cache_dir)
     if name == "imagenet_val":
-        return load_imagenet_val(root=root, image_size=image_size)
+        return load_imagenet_val(image_size=image_size, cache_dir=cache_dir)
     raise ValueError(f"Unknown dataset: {name}. Expected one of: cars, food101, country211, imagenet_val.")
 
 
 # -----------------------------------------------------------------------------
-# ImageNet val — used as primary (D_P) for immunization training.
+# ImageNet val via HuggingFace — used as primary (D_P) for immunization.
 #
-# torchvision.datasets.ImageNet expects you to have downloaded the val tarball
-# manually (Stanford pulled the auto-download). On VT ARC it is typically
-# pre-staged at /scratch/imagenet/ or similar — point `root` accordingly.
+# We try the canonical gated dataset `ILSVRC/imagenet-1k` first (requires HF
+# token + accepted terms-of-use). If access fails, fall back to ungated
+# mirrors. Both deliver the standard 1000-class scheme so the pretrained
+# ResNet18 fc weights stay valid.
 # -----------------------------------------------------------------------------
 
-def load_imagenet_val(root: str, image_size: int = 224) -> DatasetSplits:
-    """ImageNet-1k validation set (50K images, 1000 classes).
+_IMAGENET_HF_CANDIDATES: list[tuple[str, str | None, str, str]] = [
+    # (repo_id, hf_split_name (None → use first split), image_field, label_field)
+    ("ILSVRC/imagenet-1k", "validation", "image", "label"),
+    ("mrm8488/ImageNet1K-val", None, "image", "label"),
+    ("evanarlian/imagenet_1k_resized_256", "val", "image", "label"),
+]
 
-    Expects `root` to point to a folder with the standard torchvision layout:
-        root/
-          ILSVRC2012_devkit_t12.tar.gz
-          ILSVRC2012_img_val.tar
-    or the already-extracted form:
-        root/val/<class>/<image>.JPEG
+
+def load_imagenet_val(image_size: int = 224, cache_dir: str | None = None) -> DatasetSplits:
+    """ImageNet-1k validation set (50K images, 1000 classes) via HuggingFace.
+
+    Tries gated `ILSVRC/imagenet-1k`, then ungated mirrors. Returns the same
+    val split for both `train` and `test` fields — we only need it for the
+    primary-task CE term during immunization, not for actual ImageNet training.
     """
-    val = tv_datasets.ImageNet(root=root, split="val", transform=make_eval_transform(image_size))
-    # No separate "train" split here — we only need val for the primary task
-    # cross-entropy term during immunization. Reuse `val` for both fields.
-    return DatasetSplits(train=val, test=val, num_classes=1000)
+    from datasets import load_dataset
+
+    last_err: Exception | None = None
+    for repo_id, split_name, img_key, label_key in _IMAGENET_HF_CANDIDATES:
+        try:
+            kwargs = {"path": repo_id, "cache_dir": cache_dir}
+            if split_name is not None:
+                kwargs["split"] = split_name
+            ds = load_dataset(**kwargs)
+            # If split was not specified, ds is a DatasetDict; pick the first split.
+            split = ds if split_name is not None else next(iter(ds.values()))
+            print(f"[data] loaded ImageNet val from {repo_id} ({len(split)} images)")
+            wrapped_train = HFCarsWrapper(split, make_train_transform(image_size), image_key=img_key, label_key=label_key)
+            wrapped_test = HFCarsWrapper(split, make_eval_transform(image_size), image_key=img_key, label_key=label_key)
+            return DatasetSplits(train=wrapped_train, test=wrapped_test, num_classes=1000)
+        except Exception as e:
+            last_err = e
+            print(f"[data] ImageNet candidate {repo_id} failed: {type(e).__name__}: {str(e)[:100]}")
+            continue
+
+    raise RuntimeError(
+        "Could not load ImageNet val from any HuggingFace candidate. "
+        "Either accept terms at https://huggingface.co/datasets/ILSVRC/imagenet-1k "
+        f"or check that your HF token has access. Last error: {last_err}"
+    )
 
 
 def make_loaders(splits: DatasetSplits, batch_size: int = 64, num_workers: int = 4) -> Tuple[DataLoader, DataLoader]:
