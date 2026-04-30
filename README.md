@@ -8,12 +8,23 @@ This is not a research extension yet. It is a learning exercise that becomes the
 
 ## Reading order before coding
 
-Read in this order before starting any implementation. Skipping these will cost more time than it saves.
+All papers below are in `../papers/`.
 
-1. `../papers/trapping_thomas_neurips_lock_llm_2025.pdf` — the paper itself, all 10 pages.
-2. `../papers/trapping_paper_summary.md` — the structural notes already written.
-3. Zheng et al., *Model Immunization from a Condition Number Perspective*, ICML 2025 — needed for the `R_well` / `R_ill` regularizer formulas. **Not yet downloaded; do this first.**
-4. The `R_well` / `R_ill` formulas use a *feature-covariance approximation* of the Hessian. Make sure you understand why this approximation is valid before trying to reproduce it.
+**Required for implementation (read in order):**
+
+1. `trapping_thomas_neurips_lock_llm_2025.pdf` — the paper itself, all 10 pages.
+2. `../papers/trapping_paper_summary.md` — structural notes (already written).
+3. `zheng_condition_number_icml_2025.pdf` — Zheng et al., ICML 2025. Defines `R_well` and `R_ill` and the feature-covariance Hessian approximation. The trapping paper inherits these directly.
+4. `smooth_sailing_nenov_2024.pdf` — Nenov et al., ICML Workshop 2024. The differentiable κ regularizer that Zheng adapts into `R_well` / `R_ill`.
+
+**Supplementary (read as needed for context, baselines, or writing):**
+
+5. `imma_zheng_eccv_2024.pdf` — IMMA, ECCV 2024. The Table-1 `IMMA` baseline. Bi-level optimization for text-to-image model immunization.
+6. `self_destructing_henderson_aies_2023.pdf` — Self-Destructing Models, AIES 2023. Original framing of "raise the cost of harmful adaptation."
+7. `sophon_deng_sp_2024.pdf` — Sophon, IEEE S&P 2024. Non-fine-tunable learning — adjacent thread to immunization.
+8. `tar_tamirisa_iclr_2025.pdf` — TAR, ICLR 2025. Closest tamper-resistance competitor.
+9. `booster_huang_iclr_2025.pdf` — Booster, ICLR 2025 Oral. Alignment-stage defense (different threat model but useful reference).
+10. `hft_survey_huang_2024.pdf` — Huang et al. survey of harmful fine-tuning. Use for vocabulary and the broader field map; do not read cover-to-cover.
 
 ## Implementation order (staged, do not skip)
 
