@@ -1,0 +1,46 @@
+# Stage-2 condition-number immunization config.
+# Implements Algorithm 1 of Zheng et al. (ICML 2025) without the K^{-1}
+# preconditioner (see src/losses.py docstring for the simplification rationale).
+#
+# Target metrics on ResNet18 / Cars (matching trapping paper Table 1 "CN" row):
+#   RIR ≈ 3.5
+#   primary acc ≈ 62.3%
+
+seed: 42
+
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: /scratch/jaishrm/imagenet         # adjust to wherever val/ tarball is on ARC
+  max_train: 50000                         # use all 50K val images
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0                             # 0 → use all (~8K)
+
+# Optimizer (only layer3+layer4 of ResNet18 + the primary head are updated)
+lr: 0.001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 4
+grad_clip: 5.0
+
+# Loss weights
+lambda_well: 1.0
+lambda_ill: 0.1
+
+# Iteration budget — Zheng/trapping use ~2-3 epochs of immunization.
+# 50K / 64 ≈ 780 iters per epoch on the primary set; 3 epochs ≈ 2400.
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+# RIR sampling protocol per Zheng §5.2 Eq. 17
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: cn_immunize_resnet18_cars

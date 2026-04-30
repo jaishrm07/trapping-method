@@ -95,3 +95,65 @@ def _self_test() -> None:
 
 if __name__ == "__main__":
     _self_test()
+
+
+# =============================================================================
+# RIR — Relative Immunization Ratio (Zheng et al. ICML 2025, Eq. 17)
+#
+# An *intrinsic* metric: doesn't run any harmful fine-tuning, just compares
+# condition numbers of the Hessian approximations between the immunized and
+# baseline (pre-immunization) feature extractors.
+# =============================================================================
+
+import torch.nn as nn
+from torch.utils.data import Dataset
+
+
+def relative_immunization_ratio(
+    extractor_immunized: nn.Module,
+    extractor_baseline: nn.Module,
+    dataset_harmful: Dataset,
+    dataset_primary: Dataset,
+    *,
+    num_groups: int = 20,
+    group_size: int = 100,
+    device: torch.device | str = "cuda",
+    seed: int = 0,
+    eps: float = 1e-12,
+) -> dict:
+    """RIR per Eq. 17 of Zheng et al. — non-linear-extractor variant.
+
+        RIR_{θ_0} = [κ(H̃_H(θ_I)) / κ(H̃_H(θ_0))] / [κ(H̃_P(θ_I)) / κ(H̃_P(θ_0))]
+
+    Higher RIR ≫ 1 means harmful adaptation got harder *more* than primary
+    adaptation got harder.
+
+    Returns a dict with the four condition numbers and the RIR scalar so we
+    can also reproduce Table 1 columns separately.
+    """
+    # Local import to avoid a circular dependency between metrics.py and hessian.py
+    from src.hessian import condition_number, feature_covariance
+
+    K_H_imm = feature_covariance(extractor_immunized, dataset_harmful, num_groups=num_groups, group_size=group_size, device=device, seed=seed)
+    K_H_base = feature_covariance(extractor_baseline, dataset_harmful, num_groups=num_groups, group_size=group_size, device=device, seed=seed)
+    K_P_imm = feature_covariance(extractor_immunized, dataset_primary, num_groups=num_groups, group_size=group_size, device=device, seed=seed)
+    K_P_base = feature_covariance(extractor_baseline, dataset_primary, num_groups=num_groups, group_size=group_size, device=device, seed=seed)
+
+    kappa_H_imm = condition_number(K_H_imm, eps=eps)
+    kappa_H_base = condition_number(K_H_base, eps=eps)
+    kappa_P_imm = condition_number(K_P_imm, eps=eps)
+    kappa_P_base = condition_number(K_P_base, eps=eps)
+
+    harmful_ratio = kappa_H_imm / max(kappa_H_base, eps)
+    primary_ratio = kappa_P_imm / max(kappa_P_base, eps)
+    rir = harmful_ratio / max(primary_ratio, eps)
+
+    return {
+        "rir": float(rir),
+        "kappa_H_immunized": kappa_H_imm,
+        "kappa_H_baseline": kappa_H_base,
+        "kappa_P_immunized": kappa_P_imm,
+        "kappa_P_baseline": kappa_P_base,
+        "harmful_kappa_ratio": float(harmful_ratio),
+        "primary_kappa_ratio": float(primary_ratio),
+    }

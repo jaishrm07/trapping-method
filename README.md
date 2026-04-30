@@ -129,7 +129,7 @@ trapping_experiment/
 - [ ] Reading: Zheng et al. condition-number paper
 - [x] Stage 0 — environment and data (code written, not yet validated on ARC)
 - [x] Stage 1 — RFD metric (self-test passes; pending live use after Stage 4)
-- [ ] Stage 2 — condition-number regularizers
+- [x] Stage 2 — condition-number regularizers (code written + losses self-test passes; **pending GPU smoke test + live RIR validation on Cars/ResNet18**)
 - [ ] Stage 3 — trap-inducing loss
 - [ ] Stage 4 — combined immunization
 - [ ] Stage 5 — RIR and ablations

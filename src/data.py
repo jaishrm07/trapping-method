@@ -126,7 +126,33 @@ def load_dataset_by_name(name: str, root: str = "./data", image_size: int = 224,
         return load_food101(root=root, image_size=image_size)
     if name == "country211":
         return load_country211(image_size=image_size, cache_dir=cache_dir)
-    raise ValueError(f"Unknown dataset: {name}. Expected one of: cars, food101, country211.")
+    if name == "imagenet_val":
+        return load_imagenet_val(root=root, image_size=image_size)
+    raise ValueError(f"Unknown dataset: {name}. Expected one of: cars, food101, country211, imagenet_val.")
+
+
+# -----------------------------------------------------------------------------
+# ImageNet val — used as primary (D_P) for immunization training.
+#
+# torchvision.datasets.ImageNet expects you to have downloaded the val tarball
+# manually (Stanford pulled the auto-download). On VT ARC it is typically
+# pre-staged at /scratch/imagenet/ or similar — point `root` accordingly.
+# -----------------------------------------------------------------------------
+
+def load_imagenet_val(root: str, image_size: int = 224) -> DatasetSplits:
+    """ImageNet-1k validation set (50K images, 1000 classes).
+
+    Expects `root` to point to a folder with the standard torchvision layout:
+        root/
+          ILSVRC2012_devkit_t12.tar.gz
+          ILSVRC2012_img_val.tar
+    or the already-extracted form:
+        root/val/<class>/<image>.JPEG
+    """
+    val = tv_datasets.ImageNet(root=root, split="val", transform=make_eval_transform(image_size))
+    # No separate "train" split here — we only need val for the primary task
+    # cross-entropy term during immunization. Reuse `val` for both fields.
+    return DatasetSplits(train=val, test=val, num_classes=1000)
 
 
 def make_loaders(splits: DatasetSplits, batch_size: int = 64, num_workers: int = 4) -> Tuple[DataLoader, DataLoader]:
