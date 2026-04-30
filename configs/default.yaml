@@ -1,0 +1,27 @@
+# Stage-0 baseline linear-probe config.
+# Reproduces the "Init θ_0" row of Table 1 (paper §4.2).
+
+seed: 42
+
+# Dataset
+dataset: cars            # one of: cars, food101, country211
+data_root: ./data        # used by torchvision (Food101)
+image_size: 224
+
+# Backbone
+backbone: resnet18       # extended later
+
+# Adversary linear probe
+probe:
+  optimizer: sgd
+  lr: 0.01               # Table 5 default; scan ∈ {0.1, 0.01, 0.001} for sensitivity
+  momentum: 0.9
+  weight_decay: 0.0
+  batch_size: 64
+  num_workers: 4
+  epochs: 50             # Figure 2 plots up to 50 epochs of probing
+
+# Output
+log_every: 50            # iterations
+results_dir: ./results
+run_name: baseline_probe_resnet18_cars
