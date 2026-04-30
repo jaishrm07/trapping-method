@@ -78,11 +78,13 @@ The tricky part: gradients must flow through the k-step inner loop back to the i
 
 ## Compute requirements
 
-- Stage 0–2: any single GPU, even a 6 GB consumer card. Fits in MPS for a Mac too if patient.
-- Stage 3+: prefer a CUDA GPU with ≥12 GB. The k-step unroll roughly multiplies memory by k.
-- Full Table 1 reproduction (ResNet18 + ViT × 3 datasets): ~30 GPU-hours on a single H100, more on weaker GPUs.
+Running on VT ARC Falcon (`l40s_normal_q`, 48 GB L40S) — see `ARC_SETUP.md` for the full cluster reference.
 
-If only a laptop is available, use small subsets of each dataset (e.g., 1000 images) to validate code, then move to cloud GPU for paper reproduction.
+- **Stages 0–2:** a single L40S finishes a baseline linear probe in <30 min and CN-only immunization in 1–2 hours per dataset.
+- **Stage 3+:** the k-step adversary unroll multiplies activation memory by ~k. With L40S's 48 GB and ResNet18, k ∈ {3, 5, 10} all fit comfortably. ViT may need lower k or activation checkpointing.
+- **Full Table 1 reproduction** (ResNet18 + ViT × 3 datasets, all baselines + ours): ~30 GPU-hours on L40S. Single-node, single-GPU jobs throughout — no DDP needed for the paper's models.
+
+For local debugging on the Mac, the baseline probe runs on MPS (slow). Don't attempt Stage 3+ on Mac.
 
 ## Directory layout
 
@@ -115,7 +117,7 @@ trapping_experiment/
 - [x] Directory created
 - [ ] Reading: Zheng et al. condition-number paper
 - [x] Stage 0 — environment and data (code written, not yet validated on ARC)
-- [ ] Stage 1 — RFD metric
+- [x] Stage 1 — RFD metric (self-test passes; pending live use after Stage 4)
 - [ ] Stage 2 — condition-number regularizers
 - [ ] Stage 3 — trap-inducing loss
 - [ ] Stage 4 — combined immunization
