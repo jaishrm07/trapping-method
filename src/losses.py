@@ -76,25 +76,27 @@ def r_well(S: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
 
 
 def r_ill(S: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
-    """κ-maximizing regularizer (Eq. 12 of Zheng et al.), trace-normalized.
+    """κ-maximizing regularizer (Eq. 12 of Zheng et al.), *not* trace-normalized.
 
-        R_ill(S̃) = 1 / [(1/(2k)) ||S̃||_F² − ½ (σ_S̃^min)²],   where S̃ = S / tr(S)
+        R_ill(S) = 1 / [(1/(2k)) ||S||_F² − ½ (σ_S^min)²]
 
     Reading: minimizing R_ill (the value shrinks) requires the denominator
     to grow — pushing σ_min toward 0 and ||S||_F² up, increasing κ.
 
-    Args:
-        S: a 2-D PSD-ish matrix, typically a Hessian approximation [D_hid, D_hid].
-        eps: small constant inside the reciprocal *and* the trace
-            normalization, so empty/zero inputs don't NaN.
-
-    Returns:
-        A scalar tensor (differentiable). Smaller → ill-conditioned S → harder
-        for adversary to fit.
+    NOTE: unlike `r_well`, this function does *not* trace-normalize S. We
+    tried trace-normalization in commit efbf99e and the Stage-2 run on
+    Cars/ResNet18 showed r_ill stuck near its lower bound (~1000 for
+    k=512), with no descent over 500 steps. The cause: with S/tr(S), both
+    ||S̃||_F² ∈ [1/k, 1] and σ_min²/2 are bounded by 1/k², which makes the
+    denominator collapse into a tiny `1/(2k²)`-scaled range. Real
+    pretrained features start near rank-1 (eigenvalues concentrated), which
+    is already at the lower bound of trace-normalized r_ill. Skipping
+    normalization restores the meaningful gradient signal: as θ updates
+    push features further apart, ||S||_F grows, denom grows, r_ill shrinks.
+    Tune λ_ill in the config if magnitudes get unbalanced with λ_well.
     """
     if S.dim() != 2:
         raise ValueError(f"r_ill expects a 2-D matrix, got shape {tuple(S.shape)}")
-    S = _trace_normalize(S, eps=eps)
     sigmas = torch.linalg.svdvals(S)
     sigma_min_sq = sigmas[-1].pow(2)
     frob_sq = (S ** 2).sum()
