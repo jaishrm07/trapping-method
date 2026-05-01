@@ -40,7 +40,7 @@ from src.models import (
     get_resnet18_split,
     get_resnet18_extractor,
 )
-from src.trap_loss import trap_loss
+from src.trap_loss import trap_loss, trap_loss_multiop
 from src.utils import get_device, set_seed
 
 
@@ -119,8 +119,17 @@ def train_cn_immunization(cfg: dict) -> dict:
     k_inner_trap = int(cfg.get("trap_k_inner", 3))
     eta_inner_trap = float(cfg.get("trap_eta_inner", 0.01))
     use_trap = lambda_trap > 0
+    # Plan C: optional multi-operator trap. Empty list / None → use the
+    # original single-operator linear-probing trap. Non-empty list → randomize
+    # per defender step over the listed operators.
+    trap_operators = cfg.get("trap_operators") or []
     if use_trap:
-        print(f"[trap] enabled with λ_trap={lambda_trap}, k_inner={k_inner_trap}, η_inner={eta_inner_trap}")
+        if trap_operators:
+            print(f"[trap] enabled (multi-op): operators={trap_operators}, "
+                  f"λ_trap={lambda_trap}, k_inner={k_inner_trap}, η_inner={eta_inner_trap}")
+        else:
+            print(f"[trap] enabled (single-op LP): λ_trap={lambda_trap}, "
+                  f"k_inner={k_inner_trap}, η_inner={eta_inner_trap}")
 
     # K^-1 dummy-layer preconditioner (Zheng §4.4). Opt-in via config.
     use_k_inv = bool(cfg.get("use_k_inv_preconditioner", False))
@@ -163,14 +172,22 @@ def train_cn_immunization(cfg: dict) -> dict:
 
         L_trap = None
         if use_trap:
-            # Trap loss simulates an adversary doing un-preconditioned linear
-            # probing, so feed RAW features (not K^-1-wrapped).
-            L_trap = trap_loss(
-                feat_H, y_H,
-                num_classes=splits_H.num_classes,
-                k_inner=k_inner_trap,
-                eta_inner=eta_inner_trap,
-            )
+            if trap_operators:
+                L_trap = trap_loss_multiop(
+                    upper, feat_H, z_H, y_H,
+                    num_classes=splits_H.num_classes,
+                    operators=trap_operators,
+                    k_inner=k_inner_trap,
+                    eta_inner=eta_inner_trap,
+                )
+            else:
+                # Original LP-only trap (un-preconditioned features).
+                L_trap = trap_loss(
+                    feat_H, y_H,
+                    num_classes=splits_H.num_classes,
+                    k_inner=k_inner_trap,
+                    eta_inner=eta_inner_trap,
+                )
             loss = loss + lambda_trap * L_trap
 
         optim.zero_grad(set_to_none=True)
