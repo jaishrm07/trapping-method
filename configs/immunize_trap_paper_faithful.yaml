@@ -1,0 +1,56 @@
+# Stage 4.5 — paper-faithful CN+trap immunization.
+#
+# Goal: match the trapping paper Table 1 "Ours" row on Cars/ResNet18:
+#   RIR ≈ 43.9, RFD ≈ 47.2, Primary acc ≈ 65.99%
+#
+# Differences from immunize_trap.yaml:
+#  - use_k_inv_preconditioner: true   (Zheng §4.4 dummy layer for K^-1)
+#  - lr 10x smaller (1e-4 vs 1e-3) — paper uses 1e-5; we go halfway
+#  - λ_well, λ_ill, λ_trap kept at 1.0 since trace-normalization
+#    compensates and adding K^-1 should regularize gradient magnitude further.
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+# Optimizer — much smaller lr to play nicely with K^-1-preconditioned gradients
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 0
+grad_clip: 5.0
+
+# Loss weights
+lambda_well: 1.0
+lambda_ill: 1.0
+lambda_trap: 1.0
+
+# Trap loss
+trap_k_inner: 3
+trap_eta_inner: 0.01
+
+# K^-1 preconditioner for the regularizer paths
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-3
+
+# Iter budget
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+# RIR sampling
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_paper_faithful_resnet18_cars

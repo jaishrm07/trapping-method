@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.data import load_dataset_by_name, make_loaders
 from src.hessian import condition_number
+from src.k_inv_layer import k_inv_dummy_layer
 from src.losses import r_ill, r_well
 from src.metrics import relative_immunization_ratio
 from src.models import (
@@ -121,6 +122,12 @@ def train_cn_immunization(cfg: dict) -> dict:
     if use_trap:
         print(f"[trap] enabled with λ_trap={lambda_trap}, k_inner={k_inner_trap}, η_inner={eta_inner_trap}")
 
+    # K^-1 dummy-layer preconditioner (Zheng §4.4). Opt-in via config.
+    use_k_inv = bool(cfg.get("use_k_inv_preconditioner", False))
+    k_inv_ridge = float(cfg.get("k_inv_ridge", 1e-3))
+    if use_k_inv:
+        print(f"[k_inv] dummy-layer preconditioner enabled, ridge={k_inv_ridge}")
+
     history = []
     pbar = tqdm(total=iters, desc="immunize")
     step = 0
@@ -140,18 +147,24 @@ def train_cn_immunization(cfg: dict) -> dict:
         feat_P = upper(z_P)            # [B, 512]
         feat_H = upper(z_H)
 
-        # Hessians (feature-covariance approx for L2 / used same-spirit for CE)
-        H_P = feature_hessian(feat_P)
-        H_H = feature_hessian(feat_H)
-
-        # Losses
+        # Primary CE — uses raw features (no K^-1 preconditioning).
         L_primary = F.cross_entropy(primary_head(feat_P), y_P)
+
+        # Regularizer Hessians — wrap features through dummy K^-1 layer if
+        # enabled, so backward gradients to θ get K^-1-preconditioned (Zheng §4.4).
+        feat_P_for_reg = k_inv_dummy_layer(feat_P, ridge=k_inv_ridge) if use_k_inv else feat_P
+        feat_H_for_reg = k_inv_dummy_layer(feat_H, ridge=k_inv_ridge) if use_k_inv else feat_H
+        H_P = feature_hessian(feat_P_for_reg)
+        H_H = feature_hessian(feat_H_for_reg)
+
         L_well = r_well(H_P)
         L_ill = r_ill(H_H)
         loss = L_primary + cfg["lambda_well"] * L_well + cfg["lambda_ill"] * L_ill
 
         L_trap = None
         if use_trap:
+            # Trap loss simulates an adversary doing un-preconditioned linear
+            # probing, so feed RAW features (not K^-1-wrapped).
             L_trap = trap_loss(
                 feat_H, y_H,
                 num_classes=splits_H.num_classes,
