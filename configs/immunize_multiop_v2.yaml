@@ -1,0 +1,50 @@
+# Stage 5 v2 — Plan C with stronger inner-loop lr.
+#
+# Stage 5 v1 (eta_inner=0.01) failed to bound LoRA-r8: ΔL_act was too
+# small for softplus to produce meaningful defender gradient. v2 bumps
+# eta_inner from 0.01 → 0.1 (10× larger). Same Stage-4.5 defender config
+# otherwise.
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 0
+grad_clip: 5.0
+
+lambda_well: 1.0
+lambda_ill: 1.0
+lambda_trap: 1.0
+
+trap_k_inner: 3
+trap_eta_inner: 0.1            # ← 10× v1; should make LoRA inner loop bite
+
+trap_operators:
+  - linear_probe
+  - lora_r8
+
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-3
+
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_multiop_v2_eta1e-1_resnet18_cars
