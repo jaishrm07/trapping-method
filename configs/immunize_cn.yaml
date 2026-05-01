@@ -25,7 +25,7 @@ lr: 0.001
 momentum: 0.9
 weight_decay: 1.0e-4
 batch_size: 64
-num_workers: 4
+num_workers: 0    # zero — running inside user's interactive (48 GB cgroup); workers eat shmem to OOM around step 600
 grad_clip: 5.0
 
 # Loss weights — both O(1) thanks to trace-normalization in src/losses.py.
