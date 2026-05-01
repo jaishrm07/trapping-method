@@ -22,8 +22,9 @@ harmful:
   root: ./data
   max_train: 0
 
-# Optimizer — much smaller lr to play nicely with K^-1-preconditioned gradients
-lr: 0.0001
+# Optimizer — restored to Stage-4 value; K^-1 preconditioner alone provides
+# the regularization scaling, no need to also cut lr.
+lr: 0.001
 momentum: 0.9
 weight_decay: 1.0e-4
 batch_size: 64
@@ -53,4 +54,4 @@ rir_num_groups: 20
 rir_group_size: 100
 
 results_dir: ./results
-run_name: trap_paper_faithful_resnet18_cars
+run_name: trap_kinv_lr1e-3_resnet18_cars
