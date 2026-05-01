@@ -39,6 +39,7 @@ from src.models import (
     get_resnet18_split,
     get_resnet18_extractor,
 )
+from src.trap_loss import trap_loss
 from src.utils import get_device, set_seed
 
 
@@ -112,16 +113,25 @@ def train_cn_immunization(cfg: dict) -> dict:
     # Cycle harmful loader so each iteration always has a harmful batch.
     iter_H = cycle(loader_H)
 
+    # Trap loss is opt-in (Stage 4). lambda_trap > 0 enables.
+    lambda_trap = float(cfg.get("lambda_trap", 0.0))
+    k_inner_trap = int(cfg.get("trap_k_inner", 3))
+    eta_inner_trap = float(cfg.get("trap_eta_inner", 0.01))
+    use_trap = lambda_trap > 0
+    if use_trap:
+        print(f"[trap] enabled with λ_trap={lambda_trap}, k_inner={k_inner_trap}, η_inner={eta_inner_trap}")
+
     history = []
     pbar = tqdm(total=iters, desc="immunize")
     step = 0
     for x_P, y_P in cycle(loader_P):
         if step >= iters:
             break
-        x_H, _ = next(iter_H)
+        x_H, y_H = next(iter_H)
         x_P = x_P.to(device, non_blocking=True)
         y_P = y_P.to(device, non_blocking=True)
         x_H = x_H.to(device, non_blocking=True)
+        y_H = y_H.to(device, non_blocking=True)
 
         # Forward
         with torch.no_grad():
@@ -130,7 +140,7 @@ def train_cn_immunization(cfg: dict) -> dict:
         feat_P = upper(z_P)            # [B, 512]
         feat_H = upper(z_H)
 
-        # Hessians
+        # Hessians (feature-covariance approx for L2 / used same-spirit for CE)
         H_P = feature_hessian(feat_P)
         H_H = feature_hessian(feat_H)
 
@@ -140,25 +150,41 @@ def train_cn_immunization(cfg: dict) -> dict:
         L_ill = r_ill(H_H)
         loss = L_primary + cfg["lambda_well"] * L_well + cfg["lambda_ill"] * L_ill
 
+        L_trap = None
+        if use_trap:
+            L_trap = trap_loss(
+                feat_H, y_H,
+                num_classes=splits_H.num_classes,
+                k_inner=k_inner_trap,
+                eta_inner=eta_inner_trap,
+            )
+            loss = loss + lambda_trap * L_trap
+
         optim.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(params, cfg.get("grad_clip", 5.0))
         optim.step()
 
         if step % log_every == 0:
-            pbar.set_postfix(
-                primary=f"{L_primary.item():.3f}",
-                well=f"{L_well.item():.4f}",
-                ill=f"{L_ill.item():.4f}",
-            )
-            history.append({
+            postfix = {
+                "primary": f"{L_primary.item():.3f}",
+                "well": f"{L_well.item():.4f}",
+                "ill": f"{L_ill.item():.4f}",
+            }
+            if use_trap:
+                postfix["trap"] = f"{L_trap.item():.4f}"
+            pbar.set_postfix(**postfix)
+            entry = {
                 "step": step,
                 "loss_primary": float(L_primary.item()),
                 "loss_well": float(L_well.item()),
                 "loss_ill": float(L_ill.item()),
                 "kappa_H_batch": condition_number(H_H.detach()),
                 "kappa_P_batch": condition_number(H_P.detach()),
-            })
+            }
+            if use_trap:
+                entry["loss_trap"] = float(L_trap.item())
+            history.append(entry)
 
         if eval_every > 0 and step > 0 and step % eval_every == 0:
             print(f"\n[step {step}] running RIR eval (sampling {cfg['rir_num_groups']} × {cfg['rir_group_size']})")

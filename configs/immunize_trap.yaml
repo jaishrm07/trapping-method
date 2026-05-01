@@ -1,0 +1,47 @@
+# Stage-4 config: trap loss + CN regularizers + primary CE.
+# Implements the full Eq. 7 of Sarker et al. NeurIPS 2025 Lock-LLM Workshop.
+# Stage-2 (CN-only) is the same script with lambda_trap=0.
+
+seed: 42
+
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+# Optimizer
+lr: 0.001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 0
+grad_clip: 5.0
+
+# Loss weights — CN terms inherit from Stage 2 defaults that worked.
+# lambda_trap=1.0 is a starting point; tune if trap dominates or vanishes.
+lambda_well: 1.0
+lambda_ill: 1.0
+lambda_trap: 1.0
+
+# Trap-loss inner-unroll hyperparameters.
+trap_k_inner: 3        # adversary SGD steps per defender step (memory ~k×)
+trap_eta_inner: 0.01   # inner SGD lr, roughly matching realistic adversary
+
+# Iteration budget — trap loss is heavier per step, so reduce slightly.
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+# RIR sampling
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_immunize_resnet18_cars
