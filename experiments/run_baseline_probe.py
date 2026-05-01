@@ -25,7 +25,13 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.data import load_dataset_by_name, make_loaders
-from src.models import build_probe_pipeline
+from src.models import (
+    LinearProbeHead,
+    build_probe_pipeline,
+    freeze_module,
+    get_resnet18_full_extractor_from_split,
+    get_resnet18_split,
+)
 from src.utils import get_device, set_seed
 
 
@@ -55,8 +61,22 @@ def train_probe(cfg: dict) -> dict:
     train_loader, test_loader = make_loaders(splits, batch_size=cfg["probe"]["batch_size"], num_workers=cfg["probe"]["num_workers"])
     print(f"Loaded {cfg['dataset']}: {len(splits.train)} train, {len(splits.test)} test, {splits.num_classes} classes")
 
-    # Model — frozen extractor + fresh linear head
-    extractor, head = build_probe_pipeline(num_classes=splits.num_classes)
+    # Model — extractor + fresh linear head.
+    # If --extractor-checkpoint is given, load the (frozen lower + immunized
+    # upper) state from disk; otherwise use the standard ImageNet-pretrained
+    # ResNet18. Either way, the extractor is frozen for adversarial probing.
+    ckpt_path = cfg.get("extractor_checkpoint")
+    if ckpt_path:
+        print(f"Loading extractor checkpoint from {ckpt_path}")
+        ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+        lower, upper, _ = get_resnet18_split()
+        lower.load_state_dict(ckpt["lower"])
+        upper.load_state_dict(ckpt["upper"])
+        extractor = get_resnet18_full_extractor_from_split(lower, upper)
+        freeze_module(extractor)
+        head = LinearProbeHead(feature_dim=512, num_classes=splits.num_classes)
+    else:
+        extractor, head = build_probe_pipeline(num_classes=splits.num_classes)
     extractor = extractor.to(device)
     head = head.to(device)
 
@@ -111,6 +131,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=str, default="configs/default.yaml")
     parser.add_argument("--dataset", type=str, default=None, help="override config")
+    parser.add_argument("--extractor-checkpoint", type=str, default=None,
+                        help="Path to extractor.pt from a CN immunization run; if set, probes against the immunized backbone instead of the pretrained one")
+    parser.add_argument("--run-name", type=str, default=None, help="override config run_name")
     args = parser.parse_args()
 
     with open(args.config, "r") as f:
@@ -118,6 +141,10 @@ def main():
     if args.dataset is not None:
         cfg["dataset"] = args.dataset
         cfg["run_name"] = f"baseline_probe_resnet18_{args.dataset}"
+    if args.extractor_checkpoint is not None:
+        cfg["extractor_checkpoint"] = args.extractor_checkpoint
+    if args.run_name is not None:
+        cfg["run_name"] = args.run_name
 
     results_dir = Path(cfg["results_dir"]) / cfg["run_name"]
     results_dir.mkdir(parents=True, exist_ok=True)

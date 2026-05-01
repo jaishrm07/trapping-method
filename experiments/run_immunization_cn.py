@@ -202,6 +202,9 @@ def train_cn_immunization(cfg: dict) -> dict:
         "final_rir": final_rir,
         "final_primary_acc": final_primary_acc,
         "history": history,
+        # Cached for caller: run_main saves these to extractor.pt
+        "_lower_state": lower.state_dict(),
+        "_upper_state": upper.state_dict(),
     }
 
 
@@ -217,6 +220,11 @@ def main():
     results_dir.mkdir(parents=True, exist_ok=True)
 
     out = train_cn_immunization(cfg)
+
+    # Save the immunized backbone state separately so run_baseline_probe.py can load it.
+    extractor_path = results_dir / "extractor.pt"
+    torch.save({"lower": out.pop("_lower_state"), "upper": out.pop("_upper_state")}, extractor_path)
+    print(f"Saved immunized extractor → {extractor_path}")
 
     out_path = results_dir / "results.json"
     with open(out_path, "w") as f:
