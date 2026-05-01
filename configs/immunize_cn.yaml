@@ -13,7 +13,7 @@ image_size: 224
 primary:
   dataset: imagenet_val
   root: ./data                             # unused for HF-based ImageNet (see src/data.py)
-  max_train: 50000                         # use all 50K val images
+  max_train: 10000                         # subset to keep page-cache under 48G cgroup limit
 
 harmful:
   dataset: cars
