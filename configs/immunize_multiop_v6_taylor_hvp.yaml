@@ -1,0 +1,66 @@
+# Stage 6 v6 — exact LoRA Taylor trap via HVP.
+#
+# This tests the LoRA-space analogue of the trapping paper's Eq. 4-6:
+#
+#   L_trap = softplus(ΔL_act - ΔL_exp)
+#   ΔL_exp = -g_0^T Δφ - 1/2 Δφ^T H_0 Δφ
+#
+# where φ = {LoRA A/B factors, harmful head}. The Hessian term is computed
+# with one HVP; no dense H_0 is materialized.
+#
+# Conservative first run:
+#   - k_inner=3 to produce nonlocal Taylor mismatch beyond one-step geometry
+#   - η=0.1, λ_trap=0.1 to keep the v2 signal scale but soften the outer push
+#   - batch_size=32 because Taylor-HVP is heavier than v4a FOMAML
+#   - stop-grad through Δφ and φ_k by default; the Taylor value is exact for
+#     the sampled trajectory, but the defender gradient avoids third-order
+#     paths through the inner optimizer.
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 32
+num_workers: 2
+grad_clip: 1.0
+
+lambda_well: 1.0
+lambda_ill: 1.0
+lambda_trap: 0.1
+
+trap_k_inner: 3
+trap_eta_inner: 0.1
+
+trap_operators:
+  - linear_probe
+  - lora_r8
+
+lora_variant: taylor_hvp
+taylor_inner_create_graph: false
+taylor_detach_delta: true
+taylor_detach_phi_k_for_lk: true
+
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-2
+
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_multiop_v6_taylor_hvp_resnet18_cars

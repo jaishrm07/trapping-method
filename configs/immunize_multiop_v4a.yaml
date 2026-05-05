@@ -1,0 +1,74 @@
+# Stage 5 v4a — FOMAML inner update only, NO predictor.
+#
+# v4 (FOMAML + Σ η‖g_t‖² predictor) hit deterministic NaN cascade around
+# step ~2000 on both Falcon (job 386411) and role-lab (PID 594522).
+# Diagnosis (research/threads/01_lora_trap_theory.md → Derivation v1
+# epilogue): the predictor's gradient through θ involves ∂‖g_t‖²/∂θ =
+# 2 g_t · H_θφ — a Hessian-vector product factor of 2 in defender
+# gradient. Combined with catastrophic cancellation between ΔL_act and
+# the predictor (both O(η‖g‖²), residual O(η²·g·H·g)), each step throws
+# away precision. ~2000 steps in, fp32 noise floor breached → NaN.
+#
+# v4a isolates FOMAML alone:
+#   - Inner update: FOMAML (create_graph=False on inner-step grad)
+#   - Predictor: DISABLED (use_predictor: false → trap = softplus(ΔL_act))
+#
+# Pure ablation against v2:
+#   - Same trap forward as v2 (no predictor)
+#   - But FOMAML inner update instead of v2's second-order MAML chain
+#
+# Strictly removes one cross-Hessian factor from v2's defender gradient.
+# Should be at-least-as-stable as v2 (which completes 2500 steps).
+#
+# Test:
+#   - v4a > v2 on LoRA RFD → FOMAML is the lever, drop predictor path
+#   - v4a ≈ v2 on LoRA RFD → neither change matters; pivot to thread 03
+#                            (DRO weighting) or thread 04 (PEFT family)
+#   - v4a < v2 on LoRA RFD → second-order chain was helping; revert.
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 0
+grad_clip: 1.0
+
+lambda_well: 1.0
+lambda_ill: 1.0
+lambda_trap: 0.3
+
+trap_k_inner: 3
+trap_eta_inner: 0.1
+
+trap_operators:
+  - linear_probe
+  - lora_r8
+
+lora_variant: v2          # uses trap_loss_lora_v2 (FOMAML capable)
+use_predictor: false      # ← v4a distinguishing field: predictor OFF
+
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-2
+
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_multiop_v4a_fomaml_only_resnet18_cars

@@ -1,0 +1,67 @@
+# Stage 5 v4 — FOMAML LoRA inner loop + per-step linear-bound predictor.
+#
+# Two changes from v2 (the stable baseline). Each is independently
+# motivated by lit / theory:
+#
+# 1. FOMAML inner update (`lora_variant: v2` → trap_loss_lora_v2). Drops
+#    `create_graph=True` on the inner-step parameter chain. Tamirisa et al.
+#    2024 (TAR, ICLR 2025) use FOMAML at k=64 stably; Reptile (Nichol 2018)
+#    proves first-order is sufficient. v2's 360-magnitude trap blowups
+#    were a second-order chain-rule symptom, not a real signal.
+#
+# 2. Per-step linear-bound predictor (research thread 01, Form (c)).
+#    softplus(ΔL_act − Σ_t η · ‖g_t‖²) instead of softplus(ΔL_act). The
+#    predictor subtracts the trivially-predictable first-order SGD
+#    progress, so the trap penalizes only EXCESS curvature reduction.
+#    Should give a cleaner LoRA-defense signal than v2/v3 which conflate
+#    "linear progress" with "curvature surprise."
+#
+# Same v2 stable scaffolding (k=3, η=0.1, λ_trap=0.3, grad_clip=1, output
+# clamp 10, K_inv triple fallback, SVD ridge / try-except). Pure ablation:
+# v4 differs from v2 only in lora_variant.
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 0
+grad_clip: 1.0
+
+lambda_well: 1.0
+lambda_ill: 1.0
+lambda_trap: 0.3
+
+trap_k_inner: 3
+trap_eta_inner: 0.1
+
+trap_operators:
+  - linear_probe
+  - lora_r8
+
+lora_variant: v2          # ← v4 distinguishing field
+
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-2
+
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_multiop_v4_fomaml_predictor_resnet18_cars

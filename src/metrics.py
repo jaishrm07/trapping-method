@@ -109,6 +109,25 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 
 
+def _log_kappa_zheng(S: torch.Tensor, lambda_diag: float = 1e-6) -> float:
+    """Zheng et al. condition_number — `utils/loss.py:32` exactly.
+
+        S = S.to(double); S = S + λ·I
+        eigs = eigvalsh(S)
+        σ_max = max(eigs); σ_min = min(eigs[eigs > λ])
+        return log(σ_max) - log(σ_min)
+
+    Returns the *log* condition number. Caller exponentiates ratios.
+    """
+    S = S.to(dtype=torch.float64)
+    S = S + lambda_diag * torch.eye(S.shape[0], dtype=S.dtype, device=S.device)
+    eigs = torch.linalg.eigvalsh(S)
+    sigma_max = torch.max(eigs)
+    above = eigs[eigs > lambda_diag]
+    sigma_min = torch.min(above) if above.numel() > 0 else eigs.min().clamp_min(lambda_diag)
+    return float(torch.log(sigma_max) - torch.log(sigma_min))
+
+
 def relative_immunization_ratio(
     extractor_immunized: nn.Module,
     extractor_baseline: nn.Module,
@@ -120,18 +139,115 @@ def relative_immunization_ratio(
     device: torch.device | str = "cuda",
     seed: int = 0,
     eps: float = 1e-12,
+    legacy: bool = False,
 ) -> dict:
     """RIR per Eq. 17 of Zheng et al. — non-linear-extractor variant.
 
         RIR_{θ_0} = [κ(H̃_H(θ_I)) / κ(H̃_H(θ_0))] / [κ(H̃_P(θ_I)) / κ(H̃_P(θ_0))]
 
-    Higher RIR ≫ 1 means harmful adaptation got harder *more* than primary
-    adaptation got harder.
+    **Zheng-faithful protocol** (matches `utils/log.py:87` in the official
+    `model-immunization-cond-num` repo):
 
-    Returns a dict with the four condition numbers and the RIR scalar so we
-    can also reproduce Table 1 columns separately.
+    1. Sample `n=num_groups` random groups of `k=group_size` examples.
+    2. For *each group*, cast to float64, compute κ(X^T X) via
+       `eigvalsh(K + λI)` with σ_min = `min(eigs[eigs > λ])`, take log.
+    3. Per-group: `gap_i = exp(log_κ_H_imm − log_κ_H_base − log_κ_P_imm + log_κ_P_base)`
+    4. Return mean over groups.
+
+    Critical differences from our pre-2026-05-04 `legacy` implementation:
+    - Float64 (was: float32)
+    - `eigvalsh + λI` (was: `svdvals` with no ridge)
+    - σ_min filtered above ridge (was: `clamp_min(1e-12)`)
+    - **Per-group κ then average** (was: average K matrices, κ once)
+
+    The aggregation change is the dominant source of the 30-100× discrepancy
+    we saw against paper-reported RIR values: averaging covariances smooths
+    the per-batch spectrum and collapses dynamic range; per-group κ preserves
+    it. See `STAGE_RIR_REPLICATION_REPORT.md` for the verification.
+
+    Args:
+        legacy: if True, fall back to the old "average K, κ once" protocol
+            for backwards-comparison only.
+
+    Returns dict with:
+        rir, kappa_H_immunized, kappa_H_baseline, kappa_P_immunized,
+        kappa_P_baseline (per-group means, exponentiated for readability),
+        harmful_kappa_ratio, primary_kappa_ratio, n_groups, k_per_group.
     """
-    # Local import to avoid a circular dependency between metrics.py and hessian.py
+    if legacy:
+        return _relative_immunization_ratio_legacy(
+            extractor_immunized, extractor_baseline,
+            dataset_harmful, dataset_primary,
+            num_groups=num_groups, group_size=group_size,
+            device=device, seed=seed, eps=eps,
+        )
+
+    extractor_immunized.eval()
+    extractor_baseline.eval()
+
+    g = torch.Generator()
+    g.manual_seed(seed)
+    n_H = len(dataset_harmful)
+    n_P = len(dataset_primary)
+
+    log_kHi, log_kHb, log_kPi, log_kPb = [], [], [], []
+    gaps = []
+    with torch.no_grad():
+        for _ in range(num_groups):
+            idx_H = torch.randint(low=0, high=n_H, size=(group_size,), generator=g).tolist()
+            idx_P = torch.randint(low=0, high=n_P, size=(group_size,), generator=g).tolist()
+            x_H = torch.stack([dataset_harmful[i][0] for i in idx_H]).to(device)
+            x_P = torch.stack([dataset_primary[i][0] for i in idx_P]).to(device)
+
+            f_H_imm = extractor_immunized(x_H)
+            f_H_base = extractor_baseline(x_H)
+            f_P_imm = extractor_immunized(x_P)
+            f_P_base = extractor_baseline(x_P)
+
+            for f, log_list in [(f_H_imm, log_kHi), (f_H_base, log_kHb),
+                                (f_P_imm, log_kPi), (f_P_base, log_kPb)]:
+                if f.dim() > 2:
+                    f = f.flatten(1)
+                K = (f.T @ f).double()
+                log_list.append(_log_kappa_zheng(K))
+
+            gap = (log_kHi[-1] - log_kHb[-1]) - (log_kPi[-1] - log_kPb[-1])
+            gaps.append(gap)
+
+    import math
+    rir = float(sum(math.exp(g) for g in gaps) / len(gaps))
+    harmful_ratio = float(sum(math.exp(log_kHi[i] - log_kHb[i]) for i in range(len(gaps))) / len(gaps))
+    primary_ratio = float(sum(math.exp(log_kPi[i] - log_kPb[i]) for i in range(len(gaps))) / len(gaps))
+
+    return {
+        "rir": rir,
+        "kappa_H_immunized": float(sum(math.exp(v) for v in log_kHi) / len(log_kHi)),
+        "kappa_H_baseline": float(sum(math.exp(v) for v in log_kHb) / len(log_kHb)),
+        "kappa_P_immunized": float(sum(math.exp(v) for v in log_kPi) / len(log_kPi)),
+        "kappa_P_baseline": float(sum(math.exp(v) for v in log_kPb) / len(log_kPb)),
+        "harmful_kappa_ratio": harmful_ratio,
+        "primary_kappa_ratio": primary_ratio,
+        "n_groups": num_groups,
+        "k_per_group": group_size,
+    }
+
+
+def _relative_immunization_ratio_legacy(
+    extractor_immunized: nn.Module,
+    extractor_baseline: nn.Module,
+    dataset_harmful: Dataset,
+    dataset_primary: Dataset,
+    *,
+    num_groups: int = 20,
+    group_size: int = 100,
+    device: torch.device | str = "cuda",
+    seed: int = 0,
+    eps: float = 1e-12,
+) -> dict:
+    """Pre-2026-05-04 implementation: averages K matrices then κ once.
+
+    Kept for diagnostic comparisons; not the canonical metric.
+    """
     from src.hessian import condition_number, feature_covariance
 
     K_H_imm = feature_covariance(extractor_immunized, dataset_harmful, num_groups=num_groups, group_size=group_size, device=device, seed=seed)
@@ -156,4 +272,5 @@ def relative_immunization_ratio(
         "kappa_P_baseline": kappa_P_base,
         "harmful_kappa_ratio": float(harmful_ratio),
         "primary_kappa_ratio": float(primary_ratio),
+        "legacy": True,
     }

@@ -1,0 +1,59 @@
+# Stage 10 v10a - population persistent B-only LoRA immunization.
+#
+# Motivation:
+#   v9a made one persistent B/head attacker state bad, but fresh post-hoc
+#   attackers recovered. v10a keeps a small population of persistent attackers
+#   and blocks the strongest current member.
+#
+# Defender block:
+#   L_block = softplus(log(C_H) - min_j CE_H(theta, attacker_j))
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+# Defender optimizer
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 2
+grad_clip: 1.0
+
+# Persistent attacker population
+num_attackers: 4
+rank: 8
+attackers_per_outer: 2
+attacker_steps_per_selected: 1
+attacker_optimizer: adamw
+attacker_lr: 1.0e-3
+attacker_weight_decay: 0.0
+attacker_grad_clip: 5.0
+
+# Defender objective
+lambda_block: 0.3
+ce_threshold:        # null -> log(num harmful classes)
+lambda_well: 1.0
+lambda_ill: 1.0
+
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-2
+
+iterations: 2500
+log_every: 50
+eval_every: 0
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_v10a_population_bonly_resnet18_cars

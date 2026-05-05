@@ -1,0 +1,60 @@
+# Stage 7 v7 — robust optimization in LoRA-r weight ball.
+#
+# Replaces the trap mechanism with adversarial training. At each defender
+# step, an inner PGD finds the worst-case rank-r LoRA Δ within an ε ball,
+# and the defender minimizes primary CE while MAXIMIZING harmful CE at
+# that Δ.
+#
+# Defender objective:
+#   L_total(θ) = L_primary(θ) − λ_robust · L_harm(θ + Δ*, ω_H*(θ + Δ*))
+#
+# where Δ* is the post-PGD worst-case rank-r perturbation and ω_H* is
+# the closed-form ridge-LP optimum given perturbed features.
+#
+# This is a clean break from the trap line. No softplus, no trap loss,
+# no per-operator sampling. Just PGD on (A, B) factored LoRA + ridge LP
+# inner + harmful CE outer.
+#
+# Hypothesis: produces non-trivial generalized rank-distribution RFD
+# where v4a (trap, FOMAML) and v5a (DRO) gave ~0pp. See research/threads/
+# 07_v7_design.md.
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+# Outer optimizer (defender)
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 256
+num_workers: 4
+grad_clip: 1.0
+
+# v7 robust-opt hyperparameters
+lambda_robust: 0.3        # outer weight on the adversarial term
+rank: 8                   # LoRA rank for the inner adversary
+eps: 1.0                  # rank-r ball radius (||B@A||_F per layer)
+                          # initial guess; sweep {0.1, 1.0, 5.0, 10.0} in v7-eps-sweep
+k_pgd: 5                  # PGD ascent steps (Madry-AT uses 7 in image space)
+eta_pgd: 0.25             # PGD step size (≈ eps / 4)
+gamma_ridge: 1.0e-3       # ridge regularization for closed-form ω_H
+
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_v7_eps1p0_resnet18_cars

@@ -1,0 +1,566 @@
+{
+  "config": {
+    "seed": 42,
+    "image_size": 224,
+    "primary": {
+      "dataset": "imagenet_val",
+      "root": "./data",
+      "max_train": 10000
+    },
+    "harmful": {
+      "dataset": "cars",
+      "root": "./data",
+      "max_train": 0
+    },
+    "lr": 0.0001,
+    "momentum": 0.9,
+    "weight_decay": 0.0001,
+    "batch_size": 32,
+    "num_workers": 2,
+    "grad_clip": 1.0,
+    "lambda_well": 1.0,
+    "lambda_ill": 1.0,
+    "lambda_trap": 0.3,
+    "trap_k_inner": 10,
+    "trap_eta_inner": 0.01,
+    "trap_operators": [
+      "linear_probe",
+      "lora_bonly_r8"
+    ],
+    "lora_rank_for": {
+      "lora_bonly_r8": 8
+    },
+    "bonly_ce_threshold": null,
+    "bonly_inner_create_graph": false,
+    "bonly_detach_inner_updates": true,
+    "use_k_inv_preconditioner": true,
+    "k_inv_ridge": 0.01,
+    "iterations": 2500,
+    "log_every": 50,
+    "eval_every": 500,
+    "rir_num_groups": 20,
+    "rir_group_size": 100,
+    "results_dir": "./results",
+    "run_name": "trap_v8a_bonly_resnet18_cars"
+  },
+  "provenance": {
+    "git_sha": "",
+    "git_branch": "",
+    "git_dirty": false,
+    "slurm_job_id": "",
+    "slurm_array_task_id": "",
+    "hostname": "role-lab",
+    "timestamp_utc": "2026-05-04T15:57:57Z",
+    "python_version": "3.10.20"
+  },
+  "final_rir": {
+    "rir": 0.7244144807387723,
+    "kappa_H_immunized": 66838.265625,
+    "kappa_H_baseline": 68752.796875,
+    "kappa_P_immunized": 25893.494140625,
+    "kappa_P_baseline": 19294.919921875,
+    "harmful_kappa_ratio": 0.972153405577364,
+    "primary_kappa_ratio": 1.3419850533439674
+  },
+  "final_primary_acc": 0.64092,
+  "history": [
+    {
+      "step": 0,
+      "loss_primary": 1.1422903537750244,
+      "loss_well": 0.14393919706344604,
+      "loss_ill": 0.005884078796952963,
+      "kappa_H_batch": 79423905792.0,
+      "kappa_P_batch": 58028167168.0,
+      "loss_trap": 1.7311068773269653
+    },
+    {
+      "step": 50,
+      "loss_primary": 1.7106716632843018,
+      "loss_well": 0.1483830064535141,
+      "loss_ill": 0.005953680723905563,
+      "kappa_H_batch": 657032019968.0,
+      "kappa_P_batch": 142729805824.0,
+      "loss_trap": 5.28036642074585
+    },
+    {
+      "step": 100,
+      "loss_primary": 2.353649377822876,
+      "loss_well": 0.14696921408176422,
+      "loss_ill": 0.0058438763953745365,
+      "kappa_H_batch": 85324046336.0,
+      "kappa_P_batch": 54503612416.0,
+      "loss_trap": 3.259431838989258
+    },
+    {
+      "step": 150,
+      "loss_primary": 1.9067288637161255,
+      "loss_well": 0.1449556052684784,
+      "loss_ill": 0.00587710365653038,
+      "kappa_H_batch": 104792342528.0,
+      "kappa_P_batch": 118754344960.0,
+      "loss_trap": 1.9316327571868896
+    },
+    {
+      "step": 200,
+      "loss_primary": 1.5296401977539062,
+      "loss_well": 0.1496281623840332,
+      "loss_ill": 0.005878807045519352,
+      "kappa_H_batch": 69290672128.0,
+      "kappa_P_batch": 54892597248.0,
+      "loss_trap": 1.422643780708313
+    },
+    {
+      "step": 250,
+      "loss_primary": 1.6102540493011475,
+      "loss_well": 0.1430576741695404,
+      "loss_ill": 0.005932197440415621,
+      "kappa_H_batch": 193052082176.0,
+      "kappa_P_batch": 86288777216.0,
+      "loss_trap": 9.324726104736328
+    },
+    {
+      "step": 300,
+      "loss_primary": 2.0753931999206543,
+      "loss_well": 0.14022046327590942,
+      "loss_ill": 0.005959796719253063,
+      "kappa_H_batch": 1543708606464.0,
+      "kappa_P_batch": 1734096977920.0,
+      "loss_trap": 1.2074346542358398
+    },
+    {
+      "step": 350,
+      "loss_primary": 1.5974197387695312,
+      "loss_well": 0.14475637674331665,
+      "loss_ill": 0.005861043464392424,
+      "kappa_H_batch": 22643963904.0,
+      "kappa_P_batch": 276668579840.0,
+      "loss_trap": 9.101553916931152
+    },
+    {
+      "step": 400,
+      "loss_primary": 1.8195606470108032,
+      "loss_well": 0.14507362246513367,
+      "loss_ill": 0.005903859157115221,
+      "kappa_H_batch": 65153363968.0,
+      "kappa_P_batch": 80811843584.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 450,
+      "loss_primary": 1.7081489562988281,
+      "loss_well": 0.14734521508216858,
+      "loss_ill": 0.005873351823538542,
+      "kappa_H_batch": 72648679424.0,
+      "kappa_P_batch": 372952825856.0,
+      "loss_trap": 2.7050459384918213
+    },
+    {
+      "step": 500,
+      "loss_primary": 1.3841807842254639,
+      "loss_well": 0.13845710456371307,
+      "loss_ill": 0.005835607647895813,
+      "kappa_H_batch": 109169672192.0,
+      "kappa_P_batch": 228435886080.0,
+      "loss_trap": 2.7460720539093018
+    },
+    {
+      "step": 500,
+      "rir": {
+        "rir": 0.31570578091063284,
+        "kappa_H_immunized": 30954.45703125,
+        "kappa_H_baseline": 74338.484375,
+        "kappa_P_immunized": 25812.310546875,
+        "kappa_P_baseline": 19570.41015625,
+        "harmful_kappa_ratio": 0.4163988180751768,
+        "primary_kappa_ratio": 1.3189458136436445
+      }
+    },
+    {
+      "step": 550,
+      "loss_primary": 1.9555326700210571,
+      "loss_well": 0.1617952436208725,
+      "loss_ill": 0.006928085349500179,
+      "kappa_H_batch": 78520836096.0,
+      "kappa_P_batch": 369267048448.0,
+      "loss_trap": 3.1270127296447754
+    },
+    {
+      "step": 600,
+      "loss_primary": 1.7761214971542358,
+      "loss_well": 0.15536969900131226,
+      "loss_ill": 0.0061573451384902,
+      "kappa_H_batch": 730622984192.0,
+      "kappa_P_batch": 325030838272.0,
+      "loss_trap": 7.249449729919434
+    },
+    {
+      "step": 650,
+      "loss_primary": 2.270364761352539,
+      "loss_well": 0.16339901089668274,
+      "loss_ill": 0.009090554900467396,
+      "kappa_H_batch": 139881906176.0,
+      "kappa_P_batch": 181638938624.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 700,
+      "loss_primary": 1.6537044048309326,
+      "loss_well": 0.1634652018547058,
+      "loss_ill": 0.009151315316557884,
+      "kappa_H_batch": 331202002944.0,
+      "kappa_P_batch": 219736178688.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 750,
+      "loss_primary": 0.7581998705863953,
+      "loss_well": 0.15670177340507507,
+      "loss_ill": 0.008221672847867012,
+      "kappa_H_batch": 142556381184.0,
+      "kappa_P_batch": 287045877760.0,
+      "loss_trap": 3.9697067737579346
+    },
+    {
+      "step": 800,
+      "loss_primary": 1.3289878368377686,
+      "loss_well": 0.15826302766799927,
+      "loss_ill": 0.00830840039998293,
+      "kappa_H_batch": 34051522560.0,
+      "kappa_P_batch": 883586564096.0,
+      "loss_trap": 3.923145294189453
+    },
+    {
+      "step": 850,
+      "loss_primary": 1.1883912086486816,
+      "loss_well": 0.15662279725074768,
+      "loss_ill": 0.009475866332650185,
+      "kappa_H_batch": 61664477184.0,
+      "kappa_P_batch": 108303237120.0,
+      "loss_trap": 5.684752941131592
+    },
+    {
+      "step": 900,
+      "loss_primary": 1.7806364297866821,
+      "loss_well": 0.1517639458179474,
+      "loss_ill": 0.010329235345125198,
+      "kappa_H_batch": 1110204219392.0,
+      "kappa_P_batch": 331299487744.0,
+      "loss_trap": 5.270776271820068
+    },
+    {
+      "step": 950,
+      "loss_primary": 1.6358011960983276,
+      "loss_well": 0.15943677723407745,
+      "loss_ill": 0.009588274173438549,
+      "kappa_H_batch": 397206945792.0,
+      "kappa_P_batch": 2778149683200.0,
+      "loss_trap": 5.283173084259033
+    },
+    {
+      "step": 1000,
+      "loss_primary": 1.8010143041610718,
+      "loss_well": 0.15522445738315582,
+      "loss_ill": 0.008896679617464542,
+      "kappa_H_batch": 56170995712.0,
+      "kappa_P_batch": 1696923910144.0,
+      "loss_trap": 1.6681971549987793
+    },
+    {
+      "step": 1000,
+      "rir": {
+        "rir": 0.396906819439727,
+        "kappa_H_immunized": 30420.2265625,
+        "kappa_H_baseline": 73025.5546875,
+        "kappa_P_immunized": 20941.966796875,
+        "kappa_P_baseline": 19953.470703125,
+        "harmful_kappa_ratio": 0.416569606251921,
+        "primary_kappa_ratio": 1.0495400578905396
+      }
+    },
+    {
+      "step": 1050,
+      "loss_primary": 1.5974781513214111,
+      "loss_well": 0.1663140058517456,
+      "loss_ill": 0.009770323522388935,
+      "kappa_H_batch": 131671826432.0,
+      "kappa_P_batch": 80133554176.0,
+      "loss_trap": 4.964688301086426
+    },
+    {
+      "step": 1100,
+      "loss_primary": 1.0357956886291504,
+      "loss_well": 0.15390026569366455,
+      "loss_ill": 0.010337878949940205,
+      "kappa_H_batch": 213805416448.0,
+      "kappa_P_batch": 297485598720.0,
+      "loss_trap": 5.265056133270264
+    },
+    {
+      "step": 1150,
+      "loss_primary": 1.86879563331604,
+      "loss_well": 0.16197894513607025,
+      "loss_ill": 0.012707541696727276,
+      "kappa_H_batch": 55078170624.0,
+      "kappa_P_batch": 1183380144128.0,
+      "loss_trap": 5.232513904571533
+    },
+    {
+      "step": 1200,
+      "loss_primary": 1.0445811748504639,
+      "loss_well": 0.15739266574382782,
+      "loss_ill": 0.012750395573675632,
+      "kappa_H_batch": 41355812864.0,
+      "kappa_P_batch": 432585048064.0,
+      "loss_trap": 5.282200336456299
+    },
+    {
+      "step": 1250,
+      "loss_primary": 1.0868034362792969,
+      "loss_well": 0.13538573682308197,
+      "loss_ill": 0.010207817889750004,
+      "kappa_H_batch": 104493809664.0,
+      "kappa_P_batch": 524791644160.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 1300,
+      "loss_primary": 1.7288110256195068,
+      "loss_well": 0.1372504085302353,
+      "loss_ill": 0.012113742530345917,
+      "kappa_H_batch": 27508033536.0,
+      "kappa_P_batch": 351766413312.0,
+      "loss_trap": 3.439779281616211
+    },
+    {
+      "step": 1350,
+      "loss_primary": 1.1789953708648682,
+      "loss_well": 0.15065276622772217,
+      "loss_ill": 0.013361307792365551,
+      "kappa_H_batch": 471925653504.0,
+      "kappa_P_batch": 134209388544.0,
+      "loss_trap": 4.555568218231201
+    },
+    {
+      "step": 1400,
+      "loss_primary": 1.4144470691680908,
+      "loss_well": 0.1555585116147995,
+      "loss_ill": 0.01467627752572298,
+      "kappa_H_batch": 50968825856.0,
+      "kappa_P_batch": 1500838887424.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 1450,
+      "loss_primary": 0.9649934768676758,
+      "loss_well": 0.14762665331363678,
+      "loss_ill": 0.015744375064969063,
+      "kappa_H_batch": 3537449779200.0,
+      "kappa_P_batch": 445295788032.0,
+      "loss_trap": 4.542359352111816
+    },
+    {
+      "step": 1500,
+      "loss_primary": 1.2065078020095825,
+      "loss_well": 0.15549294650554657,
+      "loss_ill": 0.013424985110759735,
+      "kappa_H_batch": 142544650240.0,
+      "kappa_P_batch": 128555769856.0,
+      "loss_trap": 0.7445865869522095
+    },
+    {
+      "step": 1500,
+      "rir": {
+        "rir": 0.41477284389726626,
+        "kappa_H_immunized": 31830.35546875,
+        "kappa_H_baseline": 72350.703125,
+        "kappa_P_immunized": 20548.291015625,
+        "kappa_P_baseline": 19372.572265625,
+        "harmful_kappa_ratio": 0.43994535082481273,
+        "primary_kappa_ratio": 1.0606898626511367
+      }
+    },
+    {
+      "step": 1550,
+      "loss_primary": 1.4871952533721924,
+      "loss_well": 0.15169645845890045,
+      "loss_ill": 0.014178597368299961,
+      "kappa_H_batch": 47040405504.0,
+      "kappa_P_batch": 461868826624.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 1600,
+      "loss_primary": 1.3260811567306519,
+      "loss_well": 0.1488284468650818,
+      "loss_ill": 0.01173297967761755,
+      "kappa_H_batch": 79469363200.0,
+      "kappa_P_batch": 345296338944.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 1650,
+      "loss_primary": 1.1139917373657227,
+      "loss_well": 0.15879642963409424,
+      "loss_ill": 0.016626041382551193,
+      "kappa_H_batch": 157726113792.0,
+      "kappa_P_batch": 703219826688.0,
+      "loss_trap": 3.679095983505249
+    },
+    {
+      "step": 1700,
+      "loss_primary": 1.2010247707366943,
+      "loss_well": 0.15927265584468842,
+      "loss_ill": 0.010747944936156273,
+      "kappa_H_batch": 386386821120.0,
+      "kappa_P_batch": 460906102784.0,
+      "loss_trap": 4.576746940612793
+    },
+    {
+      "step": 1750,
+      "loss_primary": 1.19929838180542,
+      "loss_well": 0.15928611159324646,
+      "loss_ill": 0.013116005808115005,
+      "kappa_H_batch": 87659110400.0,
+      "kappa_P_batch": 95274090496.0,
+      "loss_trap": 1.5352251529693604
+    },
+    {
+      "step": 1800,
+      "loss_primary": 1.1542768478393555,
+      "loss_well": 0.16833552718162537,
+      "loss_ill": 0.011581712402403355,
+      "kappa_H_batch": 191227265024.0,
+      "kappa_P_batch": 677327077376.0,
+      "loss_trap": 1.4506314992904663
+    },
+    {
+      "step": 1850,
+      "loss_primary": 0.7954407930374146,
+      "loss_well": 0.1641402244567871,
+      "loss_ill": 0.011393558233976364,
+      "kappa_H_batch": 324078010368.0,
+      "kappa_P_batch": 110292336640.0,
+      "loss_trap": 6.555524826049805
+    },
+    {
+      "step": 1900,
+      "loss_primary": 1.5018270015716553,
+      "loss_well": 0.1634809970855713,
+      "loss_ill": 0.009743635542690754,
+      "kappa_H_batch": 135802249216.0,
+      "kappa_P_batch": 11467101306880.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 1950,
+      "loss_primary": 1.2557713985443115,
+      "loss_well": 0.16361986100673676,
+      "loss_ill": 0.010068392381072044,
+      "kappa_H_batch": 196481581056.0,
+      "kappa_P_batch": 644823908352.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 2000,
+      "loss_primary": 0.9561678171157837,
+      "loss_well": 0.16841256618499756,
+      "loss_ill": 0.01049139816313982,
+      "kappa_H_batch": 276657602560.0,
+      "kappa_P_batch": 486898925568.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 2000,
+      "rir": {
+        "rir": 0.46515964503772944,
+        "kappa_H_immunized": 37677.890625,
+        "kappa_H_baseline": 71111.7734375,
+        "kappa_P_immunized": 22095.576171875,
+        "kappa_P_baseline": 19398.23828125,
+        "harmful_kappa_ratio": 0.5298404019991855,
+        "primary_kappa_ratio": 1.1390506628239638
+      }
+    },
+    {
+      "step": 2050,
+      "loss_primary": 0.7551184892654419,
+      "loss_well": 0.16600704193115234,
+      "loss_ill": 0.009042773395776749,
+      "kappa_H_batch": 84973789184.0,
+      "kappa_P_batch": 469647294464.0,
+      "loss_trap": 1.351842999458313
+    },
+    {
+      "step": 2100,
+      "loss_primary": 1.0897364616394043,
+      "loss_well": 0.17342324554920197,
+      "loss_ill": 0.008870495483279228,
+      "kappa_H_batch": 58155773952.0,
+      "kappa_P_batch": 76612108288.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 2150,
+      "loss_primary": 1.3543931245803833,
+      "loss_well": 0.1585218757390976,
+      "loss_ill": 0.008157654665410519,
+      "kappa_H_batch": 155086979072.0,
+      "kappa_P_batch": 439411802112.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 2200,
+      "loss_primary": 1.1114863157272339,
+      "loss_well": 0.15704400837421417,
+      "loss_ill": 0.00736357644200325,
+      "kappa_H_batch": 224449183744.0,
+      "kappa_P_batch": 186111410176.0,
+      "loss_trap": 0.2875188887119293
+    },
+    {
+      "step": 2250,
+      "loss_primary": 0.9323434233665466,
+      "loss_well": 0.1698528379201889,
+      "loss_ill": 0.007616427727043629,
+      "kappa_H_batch": 126461468672.0,
+      "kappa_P_batch": 392928198656.0,
+      "loss_trap": 1.5803223848342896
+    },
+    {
+      "step": 2300,
+      "loss_primary": 0.6462427973747253,
+      "loss_well": 0.17082025110721588,
+      "loss_ill": 0.0062638516537845135,
+      "kappa_H_batch": 248586174464.0,
+      "kappa_P_batch": 4627587137536.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 2350,
+      "loss_primary": 1.1294691562652588,
+      "loss_well": 0.16844028234481812,
+      "loss_ill": 0.005759562365710735,
+      "kappa_H_batch": 445904912384.0,
+      "kappa_P_batch": 227777839104.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 2400,
+      "loss_primary": 1.4708755016326904,
+      "loss_well": 0.1716429591178894,
+      "loss_ill": 0.004907744470983744,
+      "kappa_H_batch": 228994940928.0,
+      "kappa_P_batch": 542774263808.0,
+      "loss_trap": 10.0
+    },
+    {
+      "step": 2450,
+      "loss_primary": 2.2024497985839844,
+      "loss_well": 0.1764378845691681,
+      "loss_ill": 0.004779380280524492,
+      "kappa_H_batch": 97871650816.0,
+      "kappa_P_batch": 296208072704.0,
+      "loss_trap": 0.1455157846212387
+    }
+  ]
+}

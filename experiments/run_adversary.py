@@ -6,6 +6,7 @@ adversary update operator:
     linear_probe   - Fresh head only (paper's setup)
     lora_r8        - LoRA-rank-8 on layer3+layer4 + fresh head
     lora_r32       - LoRA-rank-32 on layer3+layer4 + fresh head
+    lora_bonly_r8  - LoRA-rank-8 with fixed A, trainable B + fresh head
     full_ft_upper  - All params of layer3+layer4 + fresh head
     full_ft_all    - Even the frozen lower + everything else + fresh head
 
@@ -31,7 +32,7 @@ from tqdm import tqdm
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.data import load_dataset_by_name, make_loaders
-from src.lora import lorafy
+from src.lora import LoRAConv2d, lorafy
 from src.models import (
     LinearProbeHead,
     freeze_module,
@@ -39,6 +40,7 @@ from src.models import (
     get_resnet18_full_extractor_from_split,
     get_resnet18_split,
 )
+from src.provenance import capture_provenance
 from src.utils import get_device, set_seed
 
 
@@ -80,8 +82,35 @@ def setup_adversary(
         params = list(head.parameters())
         n_lora_layers = 0
 
-    elif adversary_type in ("lora_r8", "lora_r32"):
-        rank = 8 if adversary_type == "lora_r8" else 32
+    elif adversary_type.startswith("lora_bonly_r"):
+        # First-order LoRA tangent probe. Standard LoRA init has A random and
+        # B=0, so the initial nonzero gradient is only through B. Freezing A
+        # tests whether that initial adapter tangent subspace already exposes
+        # the harmful task.
+        try:
+            rank = int(adversary_type.split("_r", 1)[1])
+        except ValueError:
+            raise ValueError(f"Cannot parse rank from {adversary_type}; expected lora_bonly_r<int>")
+        freeze_module(lower)
+        for p in upper.parameters():
+            p.requires_grad = False
+        n_lora_layers = lorafy(upper, rank=rank)
+        for module in upper.modules():
+            if isinstance(module, LoRAConv2d):
+                for p in module.lora_A.parameters():
+                    p.requires_grad = False
+                for p in module.lora_B.parameters():
+                    p.requires_grad = True
+        extractor = get_resnet18_full_extractor_from_split(lower, upper)
+        head = LinearProbeHead(512, num_classes)
+        params = [p for p in extractor.parameters() if p.requires_grad] + list(head.parameters())
+
+    elif adversary_type.startswith("lora_r"):
+        # Accept any lora_r<int> (e.g. lora_r1, lora_r4, lora_r16, lora_r64)
+        try:
+            rank = int(adversary_type.split("_r", 1)[1])
+        except ValueError:
+            raise ValueError(f"Cannot parse rank from {adversary_type}; expected lora_r<int>")
         # Freeze lower entirely. Lorafy upper - its base convs will be frozen
         # in-place by LoRAConv2d, only LoRA params will be trainable.
         freeze_module(lower)
@@ -220,7 +249,7 @@ def main():
     parser.add_argument("--config", type=str, default="configs/default.yaml")
     parser.add_argument("--dataset", type=str, default=None)
     parser.add_argument("--adversary-type", type=str, required=True,
-                        choices=["linear_probe", "lora_r8", "lora_r32", "full_ft_upper", "full_ft_all"])
+                        help="linear_probe | lora_r<int> | full_ft_upper | full_ft_all")
     parser.add_argument("--extractor-checkpoint", type=str, default=None)
     parser.add_argument("--run-name", type=str, default=None)
     args = parser.parse_args()
@@ -239,6 +268,7 @@ def main():
 
     out = train_adversary(cfg)
     out["config"] = cfg
+    out["provenance"] = capture_provenance()
 
     out_path = results_dir / "results.json"
     with open(out_path, "w") as f:

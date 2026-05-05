@@ -68,8 +68,25 @@ def k_inv_dummy_layer(features: torch.Tensor, *, ridge: float = 1e-3) -> torch.T
     # paper's dummy layer treats K as constant for the backward).
     with torch.no_grad():
         K = features.T @ features / B
-        K = K + ridge * torch.eye(D, device=K.device, dtype=K.dtype)
-        K_inv = torch.linalg.inv(K)
+        # Scale ridge by mean diagonal so it stays effective even when feature
+        # magnitudes blow up mid-training (a fixed 1e-3 becomes negligible
+        # against a K with O(1e6) diagonal, leading to LU singular pivots).
+        diag_mean = K.diagonal().mean().clamp_min(1.0)
+        K = K + (ridge * diag_mean) * torch.eye(D, device=K.device, dtype=K.dtype)
+        # Three-tier fallback: standard inv → inv with 100× ridge in float64 →
+        # identity (no preconditioning this step). Never raises. If primary
+        # features collapse mid-training, the regularizer just gets vanilla
+        # autograd that step instead of crashing the whole run.
+        K_inv = None
+        try:
+            K_inv = torch.linalg.inv(K)
+        except torch._C._LinAlgError:
+            try:
+                K_big = K.to(torch.float64) + (99.0 * ridge * diag_mean) * \
+                    torch.eye(D, device=K.device, dtype=torch.float64)
+                K_inv = torch.linalg.inv(K_big).to(K.dtype)
+            except torch._C._LinAlgError:
+                K_inv = torch.eye(D, device=K.device, dtype=K.dtype)
     return _KInvBackward.apply(features, K_inv)
 
 
@@ -92,9 +109,12 @@ def _self_test() -> None:
     loss_pre = (feat_pre ** 2).sum()
     grad_pre = torch.autograd.grad(loss_pre, feat, retain_graph=True)[0]
 
-    # Compute reference K_inv to verify
+    # Compute reference K_inv to verify (must match the diag-scaled ridge in
+    # k_inv_dummy_layer).
     with torch.no_grad():
-        K_ref = feat.T @ feat / feat.shape[0] + 1e-3 * torch.eye(32, device=device)
+        K_raw = feat.T @ feat / feat.shape[0]
+        diag_mean = K_raw.diagonal().mean().clamp_min(1.0)
+        K_ref = K_raw + (1e-3 * diag_mean) * torch.eye(32, device=device)
         K_inv_ref = torch.linalg.inv(K_ref)
         expected = (2 * feat) @ K_inv_ref
 

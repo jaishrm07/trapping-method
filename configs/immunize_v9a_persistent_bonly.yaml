@@ -1,0 +1,58 @@
+# Stage 9 v9a — persistent B-only LoRA attacker immunization.
+#
+# Motivation:
+#   v8a showed that fresh k=10 B-only CE blocking does not move the 50-epoch
+#   B-only probe. v9a keeps the B-only attacker alive across defender steps.
+#
+# Alternating loop:
+#   attacker: train persistent B/head on Cars for attacker_steps_per_outer
+#   defender: update theta so the current trained attacker has CE >= log(C_H),
+#             while preserving ImageNet utility and CN regularizers.
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+# Defender optimizer
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 2
+grad_clip: 1.0
+
+# Persistent attacker
+rank: 8
+attacker_steps_per_outer: 3
+attacker_optimizer: adamw
+attacker_lr: 1.0e-3
+attacker_weight_decay: 0.0
+attacker_grad_clip: 5.0
+
+# Defender objective
+lambda_block: 0.3
+ce_threshold:        # null -> log(num harmful classes)
+lambda_well: 1.0
+lambda_ill: 1.0
+
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-2
+
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_v9a_persistent_bonly_resnet18_cars

@@ -1,0 +1,68 @@
+# Stage 5 v5a — DRO weighting on operator sampling.
+#
+# Hypothesis (research/threads/03_dro_operator_mixtures.md):
+# v4a's failure to move LoRA RFD beyond 1.14 is because uniform 50/50
+# sampling lets the defender succeed on LP (the easy operator) and
+# under-allocate effort to LoRA (the hard one). v5a replaces uniform
+# sampling with a running-mean-trap-value DRO weighting:
+#
+#   sample_prob[op] ∝ clamp(running_mean_trap[op], 0.1, 10)
+#
+# Operators where the defender currently has *high* trap value (= still
+# losing the bilevel game) get sampled more often. Update rule per step:
+#
+#   running_mean_trap[op] ← 0.95 * old + 0.05 * trap_value
+#
+# Pure ablation against v4a: only `dro_weighting: true` differs. Same
+# k=3 inner FOMAML, same operators [LP, LoRA-r8], same λ_trap=0.3,
+# grad_clip=1, output clamp 10.
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 0
+grad_clip: 1.0
+
+lambda_well: 1.0
+lambda_ill: 1.0
+lambda_trap: 0.3
+
+trap_k_inner: 3
+trap_eta_inner: 0.1
+
+trap_operators:
+  - linear_probe
+  - lora_r8
+
+lora_variant: v2
+use_predictor: false
+
+dro_weighting: true            # ← v5a distinguishing field
+dro_decay: 0.95
+
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-2
+
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_multiop_v5a_dro_resnet18_cars

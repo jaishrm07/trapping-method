@@ -2,8 +2,31 @@
 #
 # Stage 5 v1 (eta_inner=0.01) failed to bound LoRA-r8: ΔL_act was too
 # small for softplus to produce meaningful defender gradient. v2 bumps
-# eta_inner from 0.01 → 0.1 (10× larger). Same Stage-4.5 defender config
-# otherwise.
+# eta_inner from 0.01 → 0.1 (10× larger).
+#
+# v2 first attempt (job 385254) confirmed the η bump works (trap
+# value 3.87 vs log(2)≈0.69 saturation), but crashed at step 1519 with
+# K_inv singular: the stronger trap drove κ_P to ~12k, and ridge=1e-3
+# was relatively negligible against the inflated K diagonal. Patched
+# k_inv_layer.py to scale ridge by mean diagonal + pinv fallback; also
+# bumped k_inv_ridge 1e-3 → 1e-2 here as belt-and-suspenders.
+#
+# v2 third attempt (job 385298) survived K_inv with triple fallback but
+# crashed in r_well's own SVD at the same ~1500 step — the LoRA inner
+# loop produces softplus values up to 360 at step 0 (η=0.1 + B-init-zero
+# overshoots harmful loss), and these dominate defender gradient enough
+# to collapse primary features into a degenerate spectrum. Fix: clamp
+# trap output at 10.0 inside trap_loss_multiop so a single bad LoRA inner
+# step can no longer steamroll the defender. softplus(x>10) saturates
+# anyway, so the clamp is information-preserving for normal magnitudes.
+#
+# v2 attempts 4-5 (jobs 385299, 385310, 385314): cascading numerical
+# failures in r_well/r_ill's svdvals — fixed via SVD ridge + try/except
+# (skip regularizer with zero loss on failure). With full robustness
+# stack, no crash — but training diverged to NaN at step ~1500. Trap +
+# r_ill compounding pushed weights past stability with grad_clip=5 and
+# λ_trap=1.0. v2 attempt 6 lowers λ_trap 1.0→0.3 and grad_clip 5→1 to
+# bound both the trap pressure and the optimizer step size.
 
 seed: 42
 image_size: 224
@@ -23,11 +46,11 @@ momentum: 0.9
 weight_decay: 1.0e-4
 batch_size: 64
 num_workers: 0
-grad_clip: 5.0
+grad_clip: 1.0            # tightened from 5.0 to bound optimizer step size
 
 lambda_well: 1.0
 lambda_ill: 1.0
-lambda_trap: 1.0
+lambda_trap: 0.3          # softened from 1.0 to reduce trap-vs-r_ill compounding
 
 trap_k_inner: 3
 trap_eta_inner: 0.1            # ← 10× v1; should make LoRA inner loop bite
@@ -37,7 +60,7 @@ trap_operators:
   - lora_r8
 
 use_k_inv_preconditioner: true
-k_inv_ridge: 1.0e-3
+k_inv_ridge: 1.0e-2
 
 iterations: 2500
 log_every: 50

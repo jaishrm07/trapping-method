@@ -1,0 +1,59 @@
+# Stage 5 v3 — Plan C, Fix B (longer inner loop).
+#
+# v2 (k=3, η=0.1, λ_trap=0.3, grad_clip=1) was the first stable multi-op
+# run. LoRA-r8 RFD moved 0.67 → 1.16 — first non-noise positive signal
+# that operator-randomization transfers, but still small in absolute
+# terms (LoRA adversary loses ~1pp accuracy vs LP's ~47pp).
+#
+# Fix B from STAGE5_REPORT.md: bump trap_k_inner 3 → 10. Lets the LoRA
+# inner adversary actually fit some structure in the harmful loss
+# landscape per defender step instead of bouncing around near init. ~3×
+# memory and compute per defender step (autograd graph through 10 inner
+# SGD steps). Wallclock should be ~36 min within the 2h SLURM budget.
+#
+# Everything else identical to v2 (the stable config). If LoRA RFD
+# climbs noticeably, escalate to Fix C (warm-start LoRA factors).
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 0
+grad_clip: 1.0
+
+lambda_well: 1.0
+lambda_ill: 1.0
+lambda_trap: 0.3
+
+trap_k_inner: 10              # ← 3× v2; longer LoRA inner loop = stronger trap signal
+trap_eta_inner: 0.1
+
+trap_operators:
+  - linear_probe
+  - lora_r8
+
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-2
+
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_multiop_v3_k10_resnet18_cars

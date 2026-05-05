@@ -1,0 +1,68 @@
+# Stage 8 v8a — B-only LoRA-aware immunization.
+#
+# Motivation:
+#   Stage 7 showed v4a blocks linear probing but not the fixed-A LoRA adapter
+#   basis: v4a linear probe = 21.46%, v4a lora_bonly_r8 = 51.10%.
+#
+# This run directly targets that bypass. The multi-op loss samples:
+#   - linear_probe: paper-style LP trap
+#   - lora_bonly_r8: freeze random LoRA A, train B + harmful head for k steps,
+#     then penalize post-attack CE below random-guess CE log(C_H).
+#
+# Conservative first run:
+#   - k_inner=10 because Stage 7 B-only adaptation needed a longer horizon
+#   - eta=0.01 to keep B-only inner updates stable
+#   - lambda_trap=0.3 matching the stable v4a/v5a signal scale
+#   - batch_size=32 because k=10 B-only functional calls are heavier than LP
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 32
+num_workers: 2
+grad_clip: 1.0
+
+lambda_well: 1.0
+lambda_ill: 1.0
+lambda_trap: 0.3
+
+trap_k_inner: 10
+trap_eta_inner: 0.01
+
+trap_operators:
+  - linear_probe
+  - lora_bonly_r8
+
+lora_rank_for:
+  lora_bonly_r8: 8
+
+# Null means log(num harmful classes), i.e. random-guess CE.
+bonly_ce_threshold:
+bonly_inner_create_graph: false
+bonly_detach_inner_updates: true
+
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-2
+
+iterations: 2500
+log_every: 50
+eval_every: 500
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_v8a_bonly_resnet18_cars

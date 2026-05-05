@@ -1,0 +1,62 @@
+# Stage 12 v12a - LoRA-tangent label-removal immunization.
+#
+# Motivation:
+#   Stage 11 showed that Cars labels remain readable from learned LoRA tangent
+#   features even after v9/v10. v12a directly blocks that tangent readout.
+#
+# Defender block:
+#   T_i(x) = (f_{theta + eps * B_i A_i}(x) - f_theta(x)) / eps
+#   L_tangent = softplus(log(C_H) - min_j CE(q_j([T_1..T_m]), y_H))
+
+seed: 42
+image_size: 224
+
+primary:
+  dataset: imagenet_val
+  root: ./data
+  max_train: 10000
+
+harmful:
+  dataset: cars
+  root: ./data
+  max_train: 0
+
+# Defender optimizer
+lr: 0.0001
+momentum: 0.9
+weight_decay: 1.0e-4
+batch_size: 64
+num_workers: 2
+grad_clip: 1.0
+
+# Tangent attacker population
+num_attackers: 2
+directions_per_attacker: 3
+rank: 8
+epsilon: 1.0e-2
+b_init_std: 1.0e-3
+attackers_per_outer: 1
+attacker_steps_per_selected: 1
+attacker_optimizer: adamw
+attacker_lr: 1.0e-3
+attacker_weight_decay: 0.0
+attacker_grad_clip: 5.0
+
+# Defender objective
+lambda_tangent: 0.2
+ce_threshold:        # null -> log(num harmful classes)
+lambda_well: 1.0
+lambda_ill: 1.0
+
+use_k_inv_preconditioner: true
+k_inv_ridge: 1.0e-2
+
+iterations: 2500
+log_every: 50
+eval_every: 0
+
+rir_num_groups: 20
+rir_group_size: 100
+
+results_dir: ./results
+run_name: trap_v12a_tangent_removal_resnet18_cars

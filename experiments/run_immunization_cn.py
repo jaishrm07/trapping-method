@@ -40,6 +40,7 @@ from src.models import (
     get_resnet18_split,
     get_resnet18_extractor,
 )
+from src.provenance import capture_provenance
 from src.trap_loss import trap_loss, trap_loss_multiop
 from src.utils import get_device, set_seed
 
@@ -82,9 +83,11 @@ def train_cn_immunization(cfg: dict) -> dict:
     train_P = maybe_subset(splits_P.train, cfg["primary"].get("max_train"))
     train_H = maybe_subset(splits_H.train, cfg["harmful"].get("max_train"))
 
-    loader_P = DataLoader(train_P, batch_size=cfg["batch_size"], shuffle=True, num_workers=cfg["num_workers"], pin_memory=True, drop_last=True)
-    loader_H = DataLoader(train_H, batch_size=cfg["batch_size"], shuffle=True, num_workers=cfg["num_workers"], pin_memory=True, drop_last=True)
-    test_P = DataLoader(splits_P.test, batch_size=cfg["batch_size"], shuffle=False, num_workers=cfg["num_workers"], pin_memory=True)
+    nw = cfg["num_workers"]
+    persist = nw > 0
+    loader_P = DataLoader(train_P, batch_size=cfg["batch_size"], shuffle=True, num_workers=nw, pin_memory=True, drop_last=True, persistent_workers=persist)
+    loader_H = DataLoader(train_H, batch_size=cfg["batch_size"], shuffle=True, num_workers=nw, pin_memory=True, drop_last=True, persistent_workers=persist)
+    test_P = DataLoader(splits_P.test, batch_size=cfg["batch_size"], shuffle=False, num_workers=nw, pin_memory=True, persistent_workers=persist)
 
     print(f"Primary {cfg['primary']['dataset']}: {len(train_P)} train (max-capped)")
     print(f"Harmful {cfg['harmful']['dataset']}: {len(train_H)} train (max-capped)")
@@ -123,10 +126,35 @@ def train_cn_immunization(cfg: dict) -> dict:
     # original single-operator linear-probing trap. Non-empty list → randomize
     # per defender step over the listed operators.
     trap_operators = cfg.get("trap_operators") or []
+    lora_variant = cfg.get("lora_variant", "v1")
+    use_predictor = bool(cfg.get("use_predictor", True))
+    taylor_inner_create_graph = bool(cfg.get("taylor_inner_create_graph", False))
+    taylor_detach_delta = bool(cfg.get("taylor_detach_delta", True))
+    taylor_detach_phi_k_for_lk = bool(cfg.get("taylor_detach_phi_k_for_lk", True))
+    bonly_ce_threshold = cfg.get("bonly_ce_threshold")
+    bonly_inner_create_graph = bool(cfg.get("bonly_inner_create_graph", False))
+    bonly_detach_inner_updates = bool(cfg.get("bonly_detach_inner_updates", True))
+    dro_weighting = bool(cfg.get("dro_weighting", False))
+    dro_decay = float(cfg.get("dro_decay", 0.95))
+    lora_rank_for_cfg = cfg.get("lora_rank_for") or None  # None → trap_loss_multiop default
+    op_weights = {op: 1.0 for op in trap_operators} if dro_weighting else None
     if use_trap:
         if trap_operators:
-            print(f"[trap] enabled (multi-op): operators={trap_operators}, "
-                  f"λ_trap={lambda_trap}, k_inner={k_inner_trap}, η_inner={eta_inner_trap}")
+            mode = "DRO" if dro_weighting else "uniform"
+            print(f"[trap] enabled (multi-op, {mode}): operators={trap_operators}, "
+                  f"λ_trap={lambda_trap}, k_inner={k_inner_trap}, η_inner={eta_inner_trap}, "
+                  f"lora_variant={lora_variant}, use_predictor={use_predictor}")
+            if lora_variant == "taylor_hvp":
+                print(f"[trap] Taylor-HVP flags: inner_create_graph={taylor_inner_create_graph}, "
+                      f"detach_delta={taylor_detach_delta}, "
+                      f"detach_phi_k_for_lk={taylor_detach_phi_k_for_lk}")
+            if any(str(op).startswith("lora_bonly_r") for op in trap_operators):
+                threshold_msg = "log(num_classes)" if bonly_ce_threshold is None else str(bonly_ce_threshold)
+                print(f"[trap] B-only flags: ce_threshold={threshold_msg}, "
+                      f"inner_create_graph={bonly_inner_create_graph}, "
+                      f"detach_inner_updates={bonly_detach_inner_updates}")
+            if dro_weighting:
+                print(f"[trap] DRO decay={dro_decay}; init op_weights={op_weights}")
         else:
             print(f"[trap] enabled (single-op LP): λ_trap={lambda_trap}, "
                   f"k_inner={k_inner_trap}, η_inner={eta_inner_trap}")
@@ -179,14 +207,29 @@ def train_cn_immunization(cfg: dict) -> dict:
                     operators=trap_operators,
                     k_inner=k_inner_trap,
                     eta_inner=eta_inner_trap,
+                    lora_variant=lora_variant,
+                    use_predictor=use_predictor,
+                    taylor_inner_create_graph=taylor_inner_create_graph,
+                    taylor_detach_delta=taylor_detach_delta,
+                    taylor_detach_phi_k_for_lk=taylor_detach_phi_k_for_lk,
+                    bonly_ce_threshold=bonly_ce_threshold,
+                    bonly_inner_create_graph=bonly_inner_create_graph,
+                    bonly_detach_inner_updates=bonly_detach_inner_updates,
+                    op_weights=op_weights,
+                    dro_decay=dro_decay,
+                    lora_rank_for=lora_rank_for_cfg,
                 )
             else:
                 # Original LP-only trap (un-preconditioned features).
+                # D1/D2 ablations: opt-in via config to test whether RIR
+                # mismatch comes from K normalization or centroid detach.
                 L_trap = trap_loss(
                     feat_H, y_H,
                     num_classes=splits_H.num_classes,
                     k_inner=k_inner_trap,
                     eta_inner=eta_inner_trap,
+                    K_normalize_by_B=bool(cfg.get("trap_K_normalize_by_B", True)),
+                    detach_centroid_init=bool(cfg.get("trap_detach_centroid_init", True)),
                 )
             loss = loss + lambda_trap * L_trap
 
@@ -214,6 +257,8 @@ def train_cn_immunization(cfg: dict) -> dict:
             }
             if use_trap:
                 entry["loss_trap"] = float(L_trap.item())
+                if op_weights is not None:
+                    entry["op_weights"] = dict(op_weights)
             history.append(entry)
 
         if eval_every > 0 and step > 0 and step % eval_every == 0:
@@ -255,6 +300,7 @@ def train_cn_immunization(cfg: dict) -> dict:
 
     return {
         "config": cfg,
+        "provenance": capture_provenance(),
         "final_rir": final_rir,
         "final_primary_acc": final_primary_acc,
         "history": history,

@@ -67,8 +67,19 @@ def r_well(S: torch.Tensor, eps: float = 1e-12) -> torch.Tensor:
     """
     if S.dim() != 2:
         raise ValueError(f"r_well expects a 2-D matrix, got shape {tuple(S.shape)}")
-    S = _trace_normalize(S, eps=eps)
-    sigmas = torch.linalg.svdvals(S)
+    S_norm = _trace_normalize(S, eps=eps)
+    # SVD ridge: cusolver's SVD fails to converge when S has many repeated /
+    # near-zero singular values (happens when features collapse to a low-rank
+    # subspace mid-training). Adding a tiny diagonal regularizes the spectrum
+    # without meaningfully changing the loss.
+    S_reg = S_norm + 1e-6 * torch.eye(S_norm.shape[0], device=S_norm.device, dtype=S_norm.dtype)
+    try:
+        sigmas = torch.linalg.svdvals(S_reg)
+    except torch._C._LinAlgError:
+        # Fall back to zero loss with grad connectivity — defender just skips
+        # this regularizer for one step rather than crashing the whole run.
+        return S.sum() * 0.0
+    S = S_reg
     spectral_sq = sigmas[0].pow(2)         # ||S||₂²
     frob_sq = (S ** 2).sum()               # ||S||_F² = Σ σ_i²
     p = min(S.shape[0], S.shape[1])
@@ -97,7 +108,14 @@ def r_ill(S: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
     """
     if S.dim() != 2:
         raise ValueError(f"r_ill expects a 2-D matrix, got shape {tuple(S.shape)}")
-    sigmas = torch.linalg.svdvals(S)
+    # SVD ridge for numerical stability (see r_well comment). Use a slightly
+    # larger absolute ridge here since r_ill operates on un-normalized S.
+    S_reg = S + 1e-4 * torch.eye(S.shape[0], device=S.device, dtype=S.dtype)
+    try:
+        sigmas = torch.linalg.svdvals(S_reg)
+    except torch._C._LinAlgError:
+        return S.sum() * 0.0
+    S = S_reg
     sigma_min_sq = sigmas[-1].pow(2)
     frob_sq = (S ** 2).sum()
     k = float(sigmas.numel())

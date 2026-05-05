@@ -2,6 +2,9 @@ __pycache__/
 *.pyc
 *.pt
 *.pth
+*.pdf
 .DS_Store
 .idea/
 .vscode/
+logs/
+results/smoke_*/
